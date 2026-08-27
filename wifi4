@@ -1,0 +1,6 @@
+#!/bin/bash
+# wifi4 — OneShot AI autonomous WiFi attack tool
+# Usage: wifi4
+# Scans networks, user selects, AI auto-attacks
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec python3 "$SCRIPT_DIR/oneshot.py" --ai "$@"

