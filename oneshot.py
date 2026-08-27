@@ -3193,10 +3193,20 @@ class AIAgent:
     # ------------------------------------------------------------------
 
     def _load(self):
-        if os.path.exists(self._DATA):
+        # Try bundled models/ directory first (ships with repo)
+        _script_dir = os.path.dirname(os.path.abspath(__file__))
+        _bundled_model = os.path.join(_script_dir, 'models', 'ai_agent.joblib')
+        _bundled_data  = os.path.join(_script_dir, 'models', 'ai_data.pkl')
+        _bundled_qtab  = os.path.join(_script_dir, 'models', 'ai_qtable.pkl')
+
+        data_src  = _bundled_data  if os.path.exists(_bundled_data)  else self._DATA
+        model_src = _bundled_model if os.path.exists(_bundled_model) else self._MODEL
+        qtab_src  = _bundled_qtab  if os.path.exists(_bundled_qtab)  else self._QTAB
+
+        if os.path.exists(data_src):
             try:
                 import pickle
-                with open(self._DATA, 'rb') as fh:
+                with open(data_src, 'rb') as fh:
                     d = pickle.load(fh)
                 self.X             = d.get('X', [])
                 self.y             = d.get('y', [])
@@ -3204,19 +3214,19 @@ class AIAgent:
             except Exception:
                 pass
 
-        if self.has_ml and os.path.exists(self._MODEL):
+        if self.has_ml and os.path.exists(model_src):
             try:
                 import joblib
-                blob = joblib.load(self._MODEL)
+                blob = joblib.load(model_src)
                 self.rf_model  = blob.get('rf')
                 self.sgd_model = blob.get('sgd')
             except Exception:
                 pass
 
-        if os.path.exists(self._QTAB):
+        if os.path.exists(qtab_src):
             try:
                 import pickle
-                with open(self._QTAB, 'rb') as fh:
+                with open(qtab_src, 'rb') as fh:
                     self.q_table = pickle.load(fh)
             except Exception:
                 pass
@@ -3289,6 +3299,9 @@ class AIAgent:
         for cls in np.unique(y):
             if cls not in classes:
                 classes.append(cls)
+
+        if len(np.unique(y)) < 2:
+            return  # Need at least 2 classes for SGD
 
         self.sgd_model = SGDClassifier(loss='log_loss', random_state=42)
         self.sgd_model.fit(X, y)
