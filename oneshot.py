@@ -5129,6 +5129,555 @@ class SwarmMode:
         ifaces = ', '.join(self._interfaces) if self._interfaces else 'none'
         return f'Swarm({len(self._interfaces)} adapters: {ifaces}, scans={self._total_scans})'
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ADVANCEMENT 8: Chain of Thought (CoT) + Reflexion + Curiosity
+# ═══════════════════════════════════════════════════════════════════════════
+# Human-like reasoning: step-by-step thinking, learning from failures,
+# and curiosity-driven exploration of unknown states.
+
+class CognitiveReasoning:
+    """Autonomous reasoning engine with CoT, Reflexion, and Curiosity.
+    
+    1. Chain of Thought (CoT): Step-by-step reasoning before each action.
+       Generates a "thinking trail" that explains WHY an action is chosen.
+    
+    2. Reflexion (Episodic Memory): Learns from past failures per vendor/chipset.
+       After 3 consecutive failures, switches strategy automatically.
+    
+    3. Curiosity-Driven Exploration: Extra reward for visiting novel/unknown states.
+       Encourages deeper exploration of unfamiliar routers.
+    """
+    _DIR = os.path.join(os.path.expanduser('~'), '.OneShot-Extended')
+    _MEMORY_FILE = os.path.join(_DIR, 'episodic_memory.pkl')
+    _MAX_MEMORY = 500
+    _MAX_FAIL_STREAK = 3
+
+    def __init__(self):
+        self.episodic_memory = []  # list of {chipset, action, success, timestamp, reflection}
+        self._fail_streaks = {}   # chipset -> consecutive fail count
+        self._strategy_db = {}    # chipset -> preferred strategies
+        self._novelty_tracker = {}  # state_key -> visit count
+        self._thought_log = []    # recent CoT chains
+        self._load()
+
+    def _load(self):
+        try:
+            if os.path.exists(self._MEMORY_FILE):
+                import pickle
+                with open(self._MEMORY_FILE, 'rb') as f:
+                    d = pickle.load(f)
+                self.episodic_memory = d.get('memory', [])
+                self._fail_streaks = d.get('streaks', {})
+                self._strategy_db = d.get('strategies', {})
+                self._novelty_tracker = d.get('novelty', {})
+        except Exception:
+            pass
+
+    def _save(self):
+        try:
+            os.makedirs(self._DIR, exist_ok=True)
+            import pickle
+            with open(self._MEMORY_FILE, 'wb') as f:
+                pickle.dump({
+                    'memory': self.episodic_memory[-self._MAX_MEMORY:],
+                    'streaks': self._fail_streaks,
+                    'strategies': self._strategy_db,
+                    'novelty': self._novelty_tracker,
+                }, f)
+        except Exception:
+            pass
+
+    # ── Chain of Thought ──────────────────────────────────────────────
+    def think(self, ctx: dict, phase: str) -> dict:
+        """Generate a Chain of Thought reasoning trail.
+        
+        Returns dict with:
+          - steps: list of reasoning steps
+          - conclusion: final decision hint
+          - confidence: 0-1
+          - plan_b: fallback if primary fails
+        """
+        steps = []
+        signal = ctx.get('signal', -50)
+        locked = ctx.get('wps_locked', False)
+        attempt = ctx.get('attempt', 1)
+        timeouts = ctx.get('timeouts', 0)
+        fails = ctx.get('fails', 0)
+        bssid = ctx.get('bssid', '00:00:00:00:00:00')
+        chipset = self._get_chipset(bssid)
+
+        # Step 1: Assess the target
+        if signal > -50:
+            steps.append(('ASSESS', 'Strong signal detected — router is close and responsive'))
+        elif signal > -70:
+            steps.append(('ASSESS', 'Medium signal — acceptable for attack'))
+        else:
+            steps.append(('ASSESS', 'Weak signal — may cause timeouts, consider moving closer'))
+
+        # Step 2: Check for locks/blocking
+        if locked:
+            steps.append(('DETECT', 'WPS is LOCKED — previous attempts triggered protection'))
+            # Check if we should switch strategy
+            fail_count = self._fail_streaks.get(chipset, 0)
+            if fail_count >= self._MAX_FAIL_STREAK:
+                steps.append(('REASON', f'{fail_count} consecutive failures on {chipset} — switching strategy'))
+                steps.append(('PLAN', 'Try PBC mode or wait for lock timeout'))
+            else:
+                steps.append(('PLAN', 'Wait for lock to clear, then retry with different approach'))
+        elif timeouts >= 2:
+            steps.append(('DETECT', f'{timeouts} timeouts — router may be filtering requests'))
+            steps.append(('PLAN', 'Increase jitter, reduce attack speed'))
+        elif fails >= 3:
+            steps.append(('DETECT', f'{fails} failures — PIN brute force may not work'))
+            steps.append(('PLAN', 'Try Pixie Dust or alternative PIN algorithm'))
+        else:
+            steps.append(('DETECT', 'Target looks vulnerable — WPS active, no lock'))
+            steps.append(('PLAN', 'Proceed with standard attack chain'))
+
+        # Step 3: Chipset-specific reasoning
+        if chipset != 'unknown':
+            known_quirk = self._strategy_db.get(chipset, {})
+            if known_quirk:
+                steps.append(('KNOWLEDGE', f'Known quirk for {chipset}: {known_quirk.get("best_strategy", "standard")}'))
+            else:
+                steps.append(('CURIOSITY', f'Unknown behavior for {chipset} — will learn from this attempt'))
+
+        # Step 4: Formulate conclusion
+        if locked and fails >= 5:
+            conclusion = 'abort'
+            confidence = 0.9
+            plan_b = 'wait for lock expiry then try PBC'
+        elif locked:
+            conclusion = 'wait'
+            confidence = 0.8
+            plan_b = 'try alternative timing'
+        elif timeouts >= 3:
+            conclusion = 'skip'
+            confidence = 0.7
+            plan_b = 'switch to different target'
+        elif signal < -80:
+            conclusion = 'skip'
+            confidence = 0.6
+            plan_b = 'move closer and rescan'
+        else:
+            conclusion = 'proceed'
+            confidence = 0.85
+            plan_b = 'fallback to Pixie Dust if PIN fails'
+
+        chain = {
+            'steps': steps,
+            'conclusion': conclusion,
+            'confidence': confidence,
+            'plan_b': plan_b,
+            'chipset': chipset,
+        }
+        self._thought_log.append(chain)
+        if len(self._thought_log) > 100:
+            self._thought_log = self._thought_log[-100:]
+        return chain
+
+    # ── Reflexion (Episodic Memory) ───────────────────────────────────
+    def record_outcome(self, ctx: dict, action: str, success: bool):
+        """Record outcome and generate self-reflection."""
+        bssid = ctx.get('bssid', '00:00:00:00:00:00')
+        chipset = self._get_chipset(bssid)
+        
+        # Update fail streak
+        if not success:
+            self._fail_streaks[chipset] = self._fail_streaks.get(chipset, 0) + 1
+        else:
+            self._fail_streaks[chipset] = 0
+
+        # Generate reflection
+        reflection = self._generate_reflection(ctx, action, success, chipset)
+        
+        # Store in episodic memory
+        self.episodic_memory.append({
+            'chipset': chipset,
+            'action': action,
+            'success': success,
+            'reflection': reflection,
+            'timestamp': time.time(),
+        })
+        if len(self.episodic_memory) > self._MAX_MEMORY:
+            self.episodic_memory = self.episodic_memory[-self._MAX_MEMORY:]
+
+        # Update strategy database
+        self._update_strategy(chipset, action, success)
+        self._save()
+
+    def _generate_reflection(self, ctx, action, success, chipset):
+        """Generate a human-like self-reflection string."""
+        if success:
+            return f'Success with {chipset} using {action}. Will remember this works.'
+        else:
+            fails = self._fail_streaks.get(chipset, 0) + 1
+            if fails >= 3:
+                return f'FAILED {fails}x on {chipset} with {action}. Switching to alternative strategy.'
+            elif ctx.get('wps_locked', False):
+                return f'Router locked WPS after {action}. Need to wait or use different timing.'
+            elif ctx.get('timeouts', 0) >= 2:
+                return f'Timeouts on {chipset}. Signal may be too weak or router filtering.'
+            else:
+                return f'{action} failed on {chipset}. Will try different approach next time.'
+
+    def _update_strategy(self, chipset, action, success):
+        """Learn which strategies work per chipset."""
+        if chipset not in self._strategy_db:
+            self._strategy_db[chipset] = {'attempts': {}, 'best_strategy': None}
+        db = self._strategy_db[chipset]
+        if action not in db['attempts']:
+            db['attempts'][action] = {'success': 0, 'fail': 0}
+        if success:
+            db['attempts'][action]['success'] += 1
+        else:
+            db['attempts'][action]['fail'] += 1
+        # Find best strategy
+        best = None
+        best_score = -1
+        for act, stats in db['attempts'].items():
+            total = stats['success'] + stats['fail']
+            if total > 0:
+                score = stats['success'] / total
+                if score > best_score:
+                    best_score = score
+                    best = act
+        db['best_strategy'] = best
+
+    def get_learned_strategy(self, chipset):
+        """Retrieve learned strategy for a chipset."""
+        db = self._strategy_db.get(chipset, {})
+        return db.get('best_strategy')
+
+    # ── Curiosity-Driven Exploration ──────────────────────────────────
+    def curiosity_reward(self, ctx: dict) -> float:
+        """Calculate intrinsic curiosity reward for visiting novel states."""
+        state_key = self._discretize_state(ctx)
+        visits = self._novelty_tracker.get(state_key, 0)
+        self._novelty_tracker[state_key] = visits + 1
+        # Novelty decays with more visits
+        if visits == 0:
+            return 0.5  # First visit — high curiosity
+        elif visits < 3:
+            return 0.2  # Still relatively new
+        elif visits < 10:
+            return 0.05  # Getting familiar
+        else:
+            return 0.0  # Well-explored
+
+    def _get_chipset(self, bssid):
+        """Get chipset name from BSSID using CHIPSET_DB."""
+        return CHIPSET_DB.get(bssid.lower()[:8], {}).get('chipset', 'unknown')
+
+    def _discretize_state(self, ctx):
+        """Discretize state for novelty tracking."""
+        sig = int(ctx.get('signal', -50) / 10) * 10
+        locked = 'L' if ctx.get('wps_locked', False) else 'N'
+        attempt = min(ctx.get('attempt', 1), 10)
+        return f'{sig}_{locked}_{attempt}'
+
+    def should_switch_strategy(self, chipset):
+        """Check if we should switch strategy based on fail streak."""
+        return self._fail_streaks.get(chipset, 0) >= self._MAX_FAIL_STREAK
+
+    def status(self):
+        return f'CoT({len(self._thought_log)} thoughts, {len(self.episodic_memory)} memories, {len(self._strategy_db)} chipsets learned)'
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ADVANCEMENT 9: NLP/Regex CVE Parser
+# ═══════════════════════════════════════════════════════════════════════════
+# Advanced regex-based parsing of CVE data, vendor advisories, and
+# vulnerability descriptions from web scraping results.
+
+class CVEParser:
+    """Advanced NLP/Regex parser for CVE and vulnerability data.
+    
+    Extracts structured data from unstructured web text:
+    - CVE IDs (CVE-YYYY-NNNNN)
+    - CVSS scores (0.0-10.0)
+    - Affected products/vendors
+    - Vulnerability types (RCE, XSS, Buffer Overflow, etc.)
+    - Severity levels (Critical, High, Medium, Low)
+    - Patch information
+    """
+    # Regex patterns for CVE extraction
+    CVE_PATTERN = re.compile(r'CVE-\d{4}-\d{4,}', re.IGNORECASE)
+    CVSS_PATTERN = re.compile(r'(?:CVSS|Score|Severity)[:\s]*(\d+\.?\d*)\s*(?:/\s*10)?', re.IGNORECASE)
+    SEVERITY_PATTERN = re.compile(r'(Critical|High|Medium|Low|Info)', re.IGNORECASE)
+    VULN_TYPE_PATTERN = re.compile(
+        r'(Remote Code Execution|Command Injection|Buffer Overflow|'
+        r'Cross.Site Scripting|XSS|SQL Injection| privilege escalation|'
+        r'Authentication Bypass|Denial of Service|DoS|Information Disclosure|'
+        r'Pixie Dust|WPS.*(?:vulnerab|exploit|crack)|'
+        r'PIN.*(?:recovery|brute|calculation))',
+        re.IGNORECASE
+    )
+    AFFECTED_PATTERN = re.compile(
+        r'(?:affect|impact|vulnerab|exploit).{0,100}?(?:router|firmware|device|chipset|AP)',
+        re.IGNORECASE
+    )
+    VERSION_PATTERN = re.compile(
+        r'(?:version|v\.?|firmware)\s*[:\s]*([\d.]+(?:\s*[\-\+]\s*[\d.]+)?)',
+        re.IGNORECASE
+    )
+    PATCH_PATTERN = re.compile(
+        r'(?:patch|fix|update|upgrade|hotfix).{0,80}?(?:available|released|download)',
+        re.IGNORECASE
+    )
+
+    def parse(self, text: str) -> dict:
+        """Parse unstructured text and extract structured CVE data."""
+        if not text:
+            return {}
+
+        result = {
+            'cve_ids': list(set(self.CVE_PATTERN.findall(text))),
+            'cvss_scores': [float(x) for x in self.CVSS_PATTERN.findall(text) if 0 <= float(x) <= 10],
+            'severity': self._extract_severity(text),
+            'vuln_types': list(set(self.VULN_TYPE_PATTERN.findall(text))),
+            'affected_products': self.AFFECTED_PATTERN.findall(text)[:3],
+            'versions': self.VERSION_PATTERN.findall(text)[:5],
+            'has_patch': bool(self.PATCH_PATTERN.search(text)),
+            'raw_length': len(text),
+        }
+        # Determine max severity
+        if result['cvss_scores']:
+            max_cvss = max(result['cvss_scores'])
+            if max_cvss >= 9.0:
+                result['max_severity'] = 'Critical'
+            elif max_cvss >= 7.0:
+                result['max_severity'] = 'High'
+            elif max_cvss >= 4.0:
+                result['max_severity'] = 'Medium'
+            else:
+                result['max_severity'] = 'Low'
+        elif result['severity']:
+            result['max_severity'] = result['severity'][0]
+        else:
+            result['max_severity'] = 'Unknown'
+
+        return result
+
+    def _extract_severity(self, text: str) -> list:
+        severities = self.SEVERITY_PATTERN.findall(text)
+        # Deduplicate preserving order
+        seen = set()
+        result = []
+        for s in severities:
+            s_lower = s.lower()
+            if s_lower not in seen:
+                seen.add(s_lower)
+                result.append(s)
+        return result
+
+    def is_wps_related(self, text: str) -> bool:
+        """Check if text mentions WPS-related vulnerabilities."""
+        wps_patterns = [
+            r'WPS', r'Wi.?Fi Protected Setup', r'wps_pin', r'pixie.?dust',
+            r'wps.*(?:brute|crack|exploit|vulnerab)', r'pin.*(?:recovery|brute)',
+        ]
+        for pat in wps_patterns:
+            if re.search(pat, text, re.IGNORECASE):
+                return True
+        return False
+
+    def extract_actionable_intel(self, text: str) -> list:
+        """Extract actionable intelligence from vulnerability text."""
+        intel = []
+        parsed = self.parse(text)
+        if parsed.get('cve_ids'):
+            intel.append(f"CVEs found: {', '.join(parsed['cve_ids'][:3])}")
+        if parsed.get('vuln_types'):
+            intel.append(f"Types: {', '.join(parsed['vuln_types'][:3])}")
+        if parsed.get('max_severity') and parsed['max_severity'] != 'Unknown':
+            intel.append(f"Severity: {parsed['max_severity']}")
+        if parsed.get('has_patch'):
+            intel.append("Patch available")
+        return intel
+
+    def status(self):
+        return f'CVEParser(ready)'
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ADVANCEMENT 10: Resilience Manager (Self-Recovery)
+# ═══════════════════════════════════════════════════════════════════════════
+# Handles network drops, interface disconnects, router reboots, etc.
+# Implements fallback mechanisms and auto-recovery.
+
+class ResilienceManager:
+    """Self-recovery and resilience engine for real-world disruptions.
+    
+    Handles:
+    1. Network drops — retry with exponential backoff
+    2. Interface disconnects — auto-detect and switch adapter
+    3. Router reboots — wait and retry
+    4. Process crashes — graceful degradation
+    5. Memory/disk issues — cleanup and rollback
+    
+    Human-like reasoning: "This failed, why? What else can I try?"
+    """
+    _DIR = os.path.join(os.path.expanduser('~'), '.OneShot-Extended')
+    _STATE_FILE = os.path.join(_DIR, 'resilience.pkl')
+
+    # Recovery strategies
+    STRATEGIES = {
+        'network_drop': {'max_retries': 5, 'backoff_base': 2.0, 'max_wait': 30.0},
+        'interface_down': {'max_retries': 3, 'switch_adapter': True},
+        'router_reboot': {'max_retries': 3, 'wait_time': 10.0},
+        'timeout_spike': {'max_retries': 3, 'reduce_speed': True},
+        'signal_drop': {'max_retries': 2, 'switch_target': True},
+    }
+
+    def __init__(self):
+        self._error_history = []
+        self._recovery_count = 0
+        self._consecutive_errors = 0
+        self._last_error_type = None
+        self._fallback_chain = []
+        self._load()
+
+    def _load(self):
+        try:
+            if os.path.exists(self._STATE_FILE):
+                import pickle
+                with open(self._STATE_FILE, 'rb') as f:
+                    d = pickle.load(f)
+                self._recovery_count = d.get('recoveries', 0)
+                self._error_history = d.get('errors', [])[-100:]
+        except Exception:
+            pass
+
+    def _save(self):
+        try:
+            os.makedirs(self._DIR, exist_ok=True)
+            import pickle
+            with open(self._STATE_FILE, 'wb') as f:
+                pickle.dump({
+                    'recoveries': self._recovery_count,
+                    'errors': self._error_history[-100:],
+                }, f)
+        except Exception:
+            pass
+
+    def classify_error(self, exception: Exception) -> str:
+        """Classify an error into a category for appropriate recovery."""
+        err_str = str(exception).lower()
+        if any(x in err_str for x in ['network', 'connection', 'refused', 'unreachable']):
+            return 'network_drop'
+        elif any(x in err_str for x in ['interface', 'device', 'wlan', 'no such device']):
+            return 'interface_down'
+        elif any(x in err_str for x in ['timeout', 'timed out', 'slow']):
+            return 'timeout_spike'
+        elif any(x in err_str for x in ['signal', 'weak', 'no route']):
+            return 'signal_drop'
+        elif any(x in err_str for x in [' reboot', 'restart', 'reset']):
+            return 'router_reboot'
+        return 'unknown'
+
+    def handle_error(self, exception: Exception, ctx: dict = None) -> dict:
+        """Handle an error with human-like reasoning and recovery.
+        
+        Returns dict with:
+          - recovered: bool
+          - strategy: what was tried
+          - thinking: human-like reasoning text
+          - next_action: what to do next
+        """
+        error_type = self.classify_error(exception)
+        self._consecutive_errors += 1
+        self._last_error_type = error_type
+
+        # Record error
+        self._error_history.append({
+            'type': error_type,
+            'message': str(exception)[:200],
+            'timestamp': time.time(),
+            'consecutive': self._consecutive_errors,
+        })
+
+        strategy = self.STRATEGIES.get(error_type, {'max_retries': 2})
+        thinking = self._human_thinking(error_type, exception, ctx)
+
+        # Recovery logic
+        recovered = False
+        next_action = 'retry'
+
+        if self._consecutive_errors >= strategy.get('max_retries', 3):
+            thinking += f'\n→ After {self._consecutive_errors} failures, switching to fallback strategy.'
+            next_action = 'fallback'
+            self._consecutive_errors = 0  # Reset for next round
+        elif error_type == 'network_drop':
+            thinking += f'\n→ Retrying with backoff ({self._consecutive_errors}/{strategy["max_retries"]})...'
+            next_action = 'retry_with_backoff'
+            recovered = True
+        elif error_type == 'interface_down':
+            thinking += '\n→ Checking for alternative wireless interfaces...'
+            next_action = 'switch_interface'
+            recovered = True
+        elif error_type == 'router_reboot':
+            thinking += '\n→ Router may be rebooting. Waiting before retry...'
+            next_action = 'wait_and_retry'
+            recovered = True
+        else:
+            thinking += '\n→ Retrying with current strategy...'
+            next_action = 'retry'
+            recovered = True
+
+        self._recovery_count += 1
+        self._save()
+
+        return {
+            'recovered': recovered,
+            'strategy': error_type,
+            'thinking': thinking,
+            'next_action': next_action,
+            'consecutive': self._consecutive_errors,
+        }
+
+    def _human_thinking(self, error_type, exception, ctx):
+        """Generate human-like thinking about the error."""
+        thinking = f'[Resilience] Error detected: {error_type}'
+        if error_type == 'network_drop':
+            thinking += '\n→ "Network dropped. This could be interference or the router blocking us."'
+            thinking += '\n→ "Let me wait a moment and try again with a different timing."'
+        elif error_type == 'interface_down':
+            thinking += '\n→ "WiFi adapter disconnected. Maybe it overheated or driver crashed."'
+            thinking += '\n→ "I should check if another adapter is available."'
+        elif error_type == 'timeout_spike':
+            thinking += '\n→ "Router is responding slowly. Could be under load or filtering."'
+            thinking += '\n→ "I\'ll slow down my requests to avoid triggering rate limiting."'
+        elif error_type == 'router_reboot':
+            thinking += '\n→ "Router appears to have rebooted. It might have detected our activity."'
+            thinking += '\n→ "Smart move — I\'ll wait and resume with lower intensity."'
+        else:
+            thinking += f'\n→ "Unexpected issue: {str(exception)[:100]}"'
+            thinking += '\n→ "Let me assess and try a different approach."'
+        return thinking
+
+    def reset_error_count(self):
+        """Reset consecutive error count (call after success)."""
+        if self._consecutive_errors > 0:
+            self._consecutive_errors = 0
+            self._save()
+
+    def get_fallback_chain(self) -> list:
+        """Return chain of fallback strategies to try."""
+        return [
+            'retry_same_strategy',
+            'increase_jitter',
+            'switch_interface',
+            'reduce_attack_speed',
+            'wait_and_retry',
+            'switch_target',
+            'abort_and_report',
+        ]
+
+    def status(self):
+        return f'Resilience(recoveries={self._recovery_count}, errors={len(self._error_history)}, consecutive={self._consecutive_errors})'
+
 class DQNetwork:
     _DIR = os.path.join(os.path.expanduser('~'), '.OneShot-Extended')
     _STATE_FILE = os.path.join(_DIR, 'dqn_state.pkl')
@@ -5341,6 +5890,12 @@ class AIAgent:
         self.poison_guard = PoisonGuard()
         # ADVANCEMENT 7: Swarm Mode
         self.swarm = SwarmMode()
+        # ADVANCEMENT 8: Cognitive Reasoning (CoT + Reflexion + Curiosity)
+        self.cognition = CognitiveReasoning()
+        # ADVANCEMENT 9: CVE Parser
+        self.cve_parser = CVEParser()
+        # ADVANCEMENT 10: Resilience Manager
+        self.resilience = ResilienceManager()
 
         if len(self.X) < 5:
             self._pretrain()
@@ -5485,6 +6040,8 @@ class AIAgent:
             try:
                 self.delay_bandit._save()
                 self.dqn._save()
+                self.cognition._save()
+                self.resilience._save()
             except Exception:
                 pass
         except Exception:
@@ -5710,6 +6267,14 @@ class AIAgent:
 
         # Exploration: try a different action occasionally (but never abort
         # blindly for healthy-looking targets)
+        # ADVANCEMENT 8: Check if we should switch strategy (Reflexion)
+        bssid = ctx.get('bssid', '00:00:00:00:00:00')
+        chipset = self.cognition._get_chipset(bssid)
+        if self.cognition.should_switch_strategy(chipset):
+            learned = self.cognition.get_learned_strategy(chipset)
+            if learned and learned in self.ACTIONS:
+                return learned
+
         if _rng.random() < profile_epsilon:
             explore_actions = [a for a in self.ACTIONS]
             if ctx.get('signal', -50) > -60 and not ctx.get('wps_locked', False):
@@ -5864,6 +6429,24 @@ class AIAgent:
             self.jitter.record_attempt(ctx.get('wps_locked', False))
         except Exception:
             pass
+        # ADVANCEMENT 8: Reflexion — record outcome for episodic memory
+        try:
+            self.cognition.record_outcome(ctx, action, success)
+        except Exception:
+            pass
+        # ADVANCEMENT 8: Curiosity bonus for novel states
+        try:
+            curiosity_bonus = self.cognition.curiosity_reward(ctx)
+            if curiosity_bonus > 0:
+                self.reward_history.append(curiosity_bonus)
+        except Exception:
+            pass
+        # ADVANCEMENT 10: Reset error count on success
+        if success:
+            try:
+                self.resilience.reset_error_count()
+            except Exception:
+                pass
 
         # Keep dataset bounded (larger buffer now)
         if len(self.X) > self._MAX_OBS:
@@ -5916,6 +6499,9 @@ class AIAgent:
         parts.append(f'Jitter({self.jitter.mode})')
         parts.append(f'Guard({self.poison_guard._trap_count} traps)')
         parts.append(f'Swarm({len(self.swarm._interfaces)} adapters)')
+        parts.append(f'CoT({len(self.cognition._thought_log)} thoughts)')
+        parts.append(f'Mem({len(self.cognition.episodic_memory)})')
+        parts.append(f'Resilience({self.resilience._recovery_count} rec)')
         if not parts:
             parts.append('heuristic')
         return f'AI Agent ready ({", ".join(parts)}, {len(self.X)} obs)'
