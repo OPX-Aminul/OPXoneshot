@@ -1,416 +1,295 @@
 # OneShot-Extended (OPX)
 
-**WPS vulnerability testing and offline PIN analysis framework.**
+**AI-powered WPS vulnerability testing and offline PIN analysis framework.**
 
-A single-file, self-contained WPS (Wi-Fi Protected Setup) auditing tool that combines
-pixie-dust offline attacks, PIN algorithm derivation from OUI vendor lists, online
-bruteforce, and over-the-air WPS capability diagnostics — all in one `oneshot.py`.
-
-Forked and extended from the original OneShot project with additional features:
-`--check` offline/live diagnosis, `--all` network visibility, WPS state probing,
-automatic disabled-WPS detection, and a unified single-file architecture.
-
-> **This tool is intended exclusively for authorized security testing and research.
-> Unauthorized access to computer networks is illegal.**
+A single-file, self-contained WPS (Wi-Fi Protected Setup) auditing tool with embedded Artificial Intelligence that autonomously scans, selects, and attacks WiFi networks. The AI learns from every attempt and improves over time.
 
 ---
 
 ## Features
 
-### Smart Auto-Attack (Default Mode)
-
-When you run `python oneshot.py -i wlan0` or `python oneshot.py -i wlan0 -b BSSID`
-**without** any explicit attack flags (`-P`, `-B`, `-p`, `-N`, `--pbc`), the tool
-automatically runs the full attack chain:
-
-```
-1. Check BSSID against the 612-entry vulnerable device list (OUI match)
-   → If matched: try each probable PIN from the list
-2. If list PINs failed → Pixie Dust attack (offline PIN recovery)
-3. If Pixie Dust failed → Online bruteforce (full 8-digit search)
-```
-
-You only need to **select a network** — the tool decides the best attack strategy.
-
-### Explicit Attack Modes (override auto)
-
-| Flag | Mode | Description |
-|------|------|-------------|
-| `-P` | Pixie Dust | Offline WPS PIN recovery via weak PRNG nonce analysis |
-| `-B` | Online Bruteforce | Full 8-digit WPS PIN brute-force (up to ~11,000 attempts with smart filtering) |
-| `-p PIN` | Known PIN | Test a specific PIN (from prediction, leaked database, or manual input) |
-| `-N` | Null PIN | Try the null (all-zeros) PIN — effective on some early WPS implementations |
-| `--pbc` | Push Button | WPS Push Button Connect (PBC) mode |
-
-> When any of these flags is given, auto-attack is **disabled** and only the
-> specified mode is used.
-
-### WPS State Diagnostics (New)
-
-| Flag | Function | Description |
-|------|----------|-------------|
-| `-C BSSID` | `--check` (offline) | Match a BSSID against the 612-entry vulnerable device list + check for previously saved PINs — no interface/root required |
-| `-C BSSID -i wlan0` | `--check` (live) | Same as above + active `iw scan` to report the AP's actual over-the-air WPS state: **enabled / locked / disabled / not found** |
-| `-a` | `--all` | Show ALL networks in the scan table including those with WPS **disabled/absent** (displayed in gray as `OFF`), instead of filtering them out |
-
-### Pre-flight and Robustness
-
-- **Pre-flight WPS probe**: when `-b BSSID` is given without a prior scan, the tool
-  automatically probes the target AP to report its WPS state before launching an
-  attack. A visible AP without a WPS IE gets an immediate warning instead of
-  silently hanging.
-- **Disabled-WPS auto-abort**: if an AP never responds to any WPS protocol message
-  after 3 consecutive timeouts, the tool aborts with a clear diagnostic message
-  instead of looping indefinitely.
-
-### Additional Features
-
-- `-i` / `-b` selection: scan all networks and interactively choose, or target a
-  specific BSSID directly
-- `-k` / `-r`: kill/restore interfering wireless processes (NetworkManager,
-  wpa_supplicant, etc.)
-- `-l`: loop mode — re-scan after each attempt
-- `-w`: write recovered credentials to file
-- `-S`: show pixiewps command and raw data
-- `-F`: force pixiewps bruteforce mode
-- `-v`: verbose output
-- OUI-based PIN prediction from 612 known vulnerable device algorithms
-  (generator.py)
-- WPS lockout awareness — auto-retry with configurable timeout on locked APs
-- Android and MediaTek Wi-Fi driver support
+- **Fully Autonomous AI** -- `wifi4` scans, lists networks, user selects, AI attacks automatically
+- **Pre-trained Model** -- RF + SGD + Q-Learning (115 states, 2000+ episodes trained)
+- **Smart Auto-Attack Chain** -- Vuln list PIN -> Pixie Dust -> Online bruteforce
+- **13-Feature Vector** -- Signal, WPS version, locked state, timeouts, message counts, etc.
+- **Online Learning** -- AI improves with every attack attempt
+- **Auto Dependency Installer** -- Installs pixiewps, reaver, bully, iw automatically
+- **Global Command** -- `wifi4` works from any directory after one-time install
+- **WPS State Diagnostics** -- Checks if WPS is enabled, locked, or disabled before attacking
+- **Single File** -- Everything in `oneshot.py` (4100+ lines)
 
 ---
 
-## Single-File Architecture
-
-The entire project lives in **`oneshot.py`** — one file, no external modules.
-
-Original source files (`src/args.py`, `src/utils.py`, `src/wifi/scanner.py`,
-`src/wps/connection.py`, `src/wps/pixiewps.py`, `src/wps/generator.py`,
-`src/wps/bruteforce.py`, `src/wifi/android.py`, `src/wifi/collector.py`,
-`src/logger.py`, `ose.py`) and the 612-entry `vulnwsc.txt` vulnerable devices list
-are all embedded and bootstrapped via an in-memory `_SrcModule` shim that
-reconstructs the `src.*` package hierarchy at import time — preserving the original
-code 100% verbatim.
-
----
-
-## Requirements
-
-### System Dependencies
-
-The following must be installed and available in `$PATH`:
-
-| Dependency | Purpose |
-|------------|---------|
-| `iw` | Wireless interface scanning and control |
-| `wpa_supplicant` | WPS protocol communication (must be compiled with `CONFIG_WPS=y`) |
-| `pixiewps` | Offline Pixie Dust PIN computation |
-| `ip` | Network interface management |
-| Python >= 3.10 | Script interpreter |
-
-### Python
-
-No `pip install` required. Standard library only.
-
----
-
-## Setup
-
-### 1. Install System Dependencies
-
-**Debian / Ubuntu / Kali:**
+## Quick Start
 
 ```bash
-sudo apt update
-sudo apt install -y iw wpa_supplicant pixiewps iproute2 python3
-```
-
-**Arch Linux:**
-
-```bash
-sudo pacman -S iw wpa_supplicant pixiewps iproute2 python
-```
-
-**Termux (Android):**
-
-```bash
-pkg install root-repo
-pkg install iw wpa_supplicant pixiewps iproute2 python
-```
-
-### 2. Verify pixiewps Supports WPS
-
-```bash
-pixiewps --help 2>&1 | head -5
-```
-
-If pixiewps is not available, build from source:
-
-```bash
-git clone https://github.com/wiire-a/pixiewps.git
-cd pixiewps
-make
-sudo make install
-```
-
-### 3. Verify wpa_supplicant Has WPS Support
-
-```bash
-wpa_supplicant -h 2>&1 | grep -i wps
-```
-
-You should see `WPS` in the supported commands. If not, rebuild with:
-
-```bash
-CONFIG_WPS=y make
-```
-
-### 4. Download oneshot.py
-
-```bash
+# 1. Clone
 git clone https://github.com/OPX-Aminul/OPXoneshot.git
 cd OPXoneshot
+
+# 2. Install globally (one time)
+sudo python3 oneshot.py --install
+
+# 3. Run from anywhere
+wifi4
 ```
 
 ---
 
 ## Usage
 
-### Smart Auto-Attack: Scan → Select → Done
+### AI Autonomous Mode (Recommended)
 
 ```bash
-sudo python3 oneshot.py -i wlan0
+# From anywhere (after install)
+wifi4
+
+# Or directly
+python3 oneshot.py --ai
+
+# With specific interface
+python3 oneshot.py --ai -i wlan0
 ```
 
-The tool scans, shows a list, you select one — and it automatically:
-1. Checks the vulnerable device list for your AP's MAC
-2. Tries the list PIN if matched
-3. Falls back to Pixie Dust, then bruteforce
+**What happens:**
+1. Auto-detects wireless interface
+2. Scans all nearby WPS networks
+3. Shows numbered list -- you select one
+4. AI checks if it is in the vulnerable device list
+5. If found -- uses the known PIN directly
+6. If not found -- Pixie Dust attack -> Online bruteforce
+7. AI decides at each phase whether to proceed, wait, skip, or abort
+8. Model saves automatically (learns from every attempt)
 
-### Smart Auto-Attack: Target a Specific BSSID
+### Manual Modes
 
 ```bash
-sudo python3 oneshot.py -i wlan0 -b AA:BB:CC:11:22:33
+# Check a router (no attack)
+python3 oneshot.py --check BSSID
+
+# Scan and select network
+python3 oneshot.py -i wlan0
+
+# Pixie Dust attack
+python3 oneshot.py -i wlan0 -b BSSID -P
+
+# Online bruteforce
+python3 oneshot.py -i wlan0 -b BSSID -B
+
+# Use specific PIN
+python3 oneshot.py -i wlan0 -b BSSID -p 12345670
+
+# Push button connect
+python3 oneshot.py -i wlan0 -b BSSID --pbc
+
+# Show all networks (including WPS disabled)
+python3 oneshot.py -i wlan0 -a
+
+# Kill interfering processes
+python3 oneshot.py -i wlan0 -k
+
+# Loop mode
+python3 oneshot.py -i wlan0 -l
 ```
 
-Same auto chain — no need to specify `-P` or `-B`.
-
-### Explicit Pixie Dust (override auto)
+### Install / Uninstall
 
 ```bash
-sudo python3 oneshot.py -i wlan0 -b AA:BB:CC:11:22:33 -P
-```
+# Install globally
+sudo python3 oneshot.py --install
 
-### Explicit Online Bruteforce (override auto)
-
-```bash
-sudo python3 oneshot.py -i wlan0 -b AA:BB:CC:11:22:33 -B
-```
-
-### Test a Known PIN
-
-```bash
-sudo python3 oneshot.py -i wlan0 -b AA:BB:CC:11:22:33 -p 12345670
-```
-
-### WPS Push Button Connect
-
-```bash
-sudo python3 oneshot.py -i wlan0 --pbc
-```
-
-### Offline BSSID Check (no root or interface needed)
-
-```bash
-python3 oneshot.py --check AA:BB:CC:11:22:33
-```
-
-Output:
-```
-[*] Checking AA:BB:CC:11:22:33 against the vulnerable lists...
-[+] IN the vulnerable list: 3 known vulnerable device algorithm(s) match this router:
-[*]   - pinDLink   D-Link PIN (probable PIN: 76465154)
-[*]   - pinDLink1  D-Link PIN+1 (probable PIN: 66672982)
-[*] Recommended first PIN to try: 76465154
-```
-
-### Live WPS State Probe (offline check + over-the-air scan)
-
-```bash
-sudo python3 oneshot.py --check AA:BB:CC:11:22:33 -i wlan0
-```
-
-Output (if WPS is disabled on the AP):
-```
-[*] Checking AA:BB:CC:11:22:33 against the vulnerable lists...
-[*] Probing AA:BB:CC:11:22:33 over the air (interface: wlan0)...
-[-] AP not observed in the scan — out of range, hidden, or on another channel
-```
-
-Or:
-```
-[-] Over the air: WPS is DISABLED on this AP (no WPS IE broadcast).
-    WPS-based attacks are not possible while it stays off —
-    even a derived/predicted PIN cannot be used
-```
-
-### Scan All Networks (Including WPS-Disabled)
-
-```bash
-sudo python3 oneshot.py -i wlan0 -a
-```
-
-Displays all visible APs, with WPS-disabled ones shown in **gray** as `OFF` in the
-`Ver.` column.
-
-### Kill Interfering Processes + Loop Mode
-
-```bash
-sudo python3 oneshot.py -i wlan0 -k -P -l
-```
-
-### Verbose + Write Results
-
-```bash
-sudo python3 oneshot.py -i wlan0 -b AA:BB:CC:11:22:33 -P -v -w
+# This creates:
+#   /usr/local/bin/wifi4       (AI autonomous command)
+#   /usr/local/bin/oneshot     (general command)
+#   /usr/local/bin/oneshot-ai/ (script + models)
 ```
 
 ---
 
-## Command Reference
+## How the AI Works
+
+### Architecture
 
 ```
-usage: oneshot.py [-h] [-i IFACE] [-b BSSID] [-C BSSID] [-p PIN] [-N] [-P] [-B]
-                  [--pbc] [-k] [-r] [-w] [-l] [-c] [-a] [-d DELAY] [-t TIMEOUT]
-                  [-F] [-S] [-I] [-M] [-D] [--reverse-scan] [--vuln-list FILE] [-v]
++-------------------+
+|   User selects    |
+|   network         |
++--------+----------+
+         |
+    +----v----+
+    | AIAgent |
+    +----+----+
+         |
+    +----v----------+----------+----------+
+    |               |          |          |
+    |  RF Model     | SGD      | Q-Table  |
+    |  (batch, 0.4) | (online, | (RL,     |
+    |               |  0.3)    |  0.3)    |
+    +----+----------+----+-----+----+-----+
+         |               |          |
+         +-------+-------+----------+
+                 |
+         +-------v--------+
+         |  Vote Weighted  |
+         |  Decision       |
+         +-------+--------+
+                 |
+    +------------+------------+
+    |            |            |
+proceed       wait/skip     abort
 ```
 
-### Required Arguments
+### 13 Features
 
-| Flag | Description |
-|------|-------------|
-| `-i`, `--interface` | Wireless interface name (e.g., `wlan0`). Not required when using `-C` alone. |
-| `-b`, `--bssid` | Target AP MAC address. If omitted, a scan + interactive selection is performed. |
+| # | Feature | Description |
+|---|---------|-------------|
+| 1 | signal | WiFi signal strength (dBm) |
+| 2 | wps_version | WPS protocol version |
+| 3 | wps_locked | Is WPS setup locked? |
+| 4 | is_vulnerable | Known vulnerable device? |
+| 5 | attempt | Current attempt number |
+| 6 | timeouts | Consecutive timeouts |
+| 7 | resp_delay | Response delay (seconds) |
+| 8 | m_msgs | M-message count (WPS progress) |
+| 9 | fails | Failed attempts so far |
+| 10 | sig_ok | Signal above threshold? |
+| 11 | oui | OUI match from vuln list? |
+| 12 | frame_loss | Frame loss ratio |
+| 13 | hist_locks | Historical lock events |
 
-### Check Mode (No Attack)
+### Training
 
-| Flag | Description |
-|------|-------------|
-| `-C`, `--check BSSID` | Check a BSSID against the vulnerable list and saved data. Add `-i` to also probe the AP over the air. |
+The model is pre-trained with 2000+ episodes across 25 scenarios:
+- **Vuln list attacks** (5 scenarios) -- Easy/Medium/Tight/Locked/Disabled
+- **Pixie Dust attacks** (5 scenarios) -- Real vuln/Marginal/Weak/Not vuln/Locked
+- **Bruteforce attacks** (5 scenarios) -- Good/Fair/Weak/Locked/Timeout
+- **Exhaustive attacks** (5 scenarios) -- All correct/Marginal/Bad/Lockout/Disabled
+- **Adversarial edge cases** (5 scenarios) -- Traps and confusion patterns
 
-### Attack Modes (mutually exclusive)
+### Decision Flow
 
-| Flag | Description |
-|------|-------------|
-| `-p`, `--pin PIN` | Use the specified PIN |
-| `-N`, `--null-pin` | Use null (all-zeros) PIN |
-| `-P`, `--pixie-dust` | Run Pixie Dust offline attack |
-| `-B`, `--bruteforce` | Run online PIN brute-force |
-| `--pbc` | WPS Push Button Connect |
-
-### Optional Arguments
-
-| Flag | Description |
-|------|-------------|
-| `-k`, `--kill` | Kill processes interfering with the wireless interface |
-| `-r`, `--restore` | Restore killed processes on exit (use with `-k`) |
-| `-w`, `--write` | Write credentials to file on success |
-| `-l`, `--loop` | Re-scan and retry in a loop |
-| `-c`, `--clear` | Clear the screen before each scan |
-| `-a`, `--all` | Show all networks including WPS-disabled (gray/`OFF`) |
-| `-d`, `--delay` | Delay between brute-force pin attempts (default: 0) |
-| `-t`, `--timeout` | Timeout for retrying after WPS lock (default: 60s) |
-
-### Advanced Arguments
-
-| Flag | Description |
-|------|-------------|
-| `-F`, `--pixie-force` | Run pixiewps with `--force` (full bruteforce range) |
-| `-S`, `--show-pixie` | Print pixiewps command and related data |
-| `-I`, `--iface-down` | Down the interface on exit |
-| `-M`, `--mtk-wifi` | Activate MediaTek Wi-Fi interface driver on startup |
-| `-D`, `--dont-touch-settings` | Don't touch Android Wi-Fi settings |
-| `--reverse-scan` | Reverse network list order (small displays) |
-| `--vuln-list FILE` | Custom vulnerable devices list file |
-| `-v`, `--verbose` | Verbose output |
-
----
-
-## How It Works
-
-### Pixie Dust Attack
-
-1. Connect to the target AP via WPS
-2. Capture the EAPOL WPS exchange (PKE, PKR, E-S1, E-S2, E-Hash1, E-Hash2, AuthKey)
-3. Run `pixiewps` offline to brute-force the PIN from weak router-generated nonces
-4. Reconnect with the recovered PIN to extract the WPA PSK
-
-**Affected routers**: Those using predictable PRNGs for WPS nonces
-(Ralink/eCos, Realtek RTL819x, Broadcom, D-Link, and others — 612 known vulnerable
-devices in the embedded list).
-
-### OUI-Based PIN Prediction
-
-The `generator.py` module contains 8+ algorithms that predict WPS PINs based on
-the router's MAC address (OUI prefix). For vulnerable vendors, the PIN is often
-derived from a deterministic formula — no attack traffic needed.
-
-### WPS State Classification
-
-The new `classifyWpsState()` / `probeWpsState()` functions parse `iw scan` output
-to determine whether a target AP:
-
-- **Enabled**: WPS IE present in beacon/probe response, no lock flag
-- **Locked**: WPS IE present, but AP Setup Locked flag set (temporary lockout)
-- **Disabled**: AP is visible but does not broadcast any WPS IE (firmware-level off)
-- **Unknown**: AP not observed or insufficient data
-
----
-
-## WPS Disabled — Why It Cannot Be Bypassed
-
-If a router has its WPS feature turned **OFF** in firmware, the WPS protocol state
-machine is never instantiated on the AP. There is no WPS Registrar/Enrollee service
-running to respond to any client-side probe or manipulation. This means:
-
-- **No protocol trick** can start an un-started state machine
-- **Deauthentication frames** do not toggle firmware feature flags
-- **UPnP WPS PIN disclosure** (Viehbock 2011) only leaks the PIN — it does not
-  re-enable WPS, and is typically also disabled when WPS is off
-- **WPS lockout bypass** (MAC spoofing/deauth reset) only applies to temporary
-  lockout, not firmware-level disabling
-
-The **only** scenario where WPS "appears disabled but still works" is a firmware bug
-on certain cheap routers/ISP CPEs where the UI toggle does not actually disable the
-WPS service. The `--probe` / `-C -i` diagnostics detect this by checking the actual
-over-the-air WPS IE.
+```
+1. AI checks vuln list -> found? -> Try PIN -> Success? Done.
+2. Not found or PIN failed -> AI decides: Pixie Dust?
+3. Pixie Dust failed -> AI decides: Bruteforce?
+4. Each phase: AI considers signal, locks, timeouts, history
+5. AI can abort early if success probability is too low
+6. Every attempt is recorded -> model improves over time
+```
 
 ---
 
 ## File Structure
 
 ```
-oneshot.py          # The entire tool (single file, ~3260 lines)
+OPXoneshot/
++-- oneshot.py          # Main script (4100+ lines, everything included)
++-- models/
+|   +-- ai_agent.joblib  # RF + SGD trained models (78KB)
+|   +-- ai_data.pkl      # 500 observations (60KB)
+|   +-- ai_qtable.pkl    # Q-table: 115 states (7KB)
++-- vulnwsc.txt          # Vulnerable devices list (embedded in oneshot.py)
++-- wifi4                # Shortcut script
++-- README.md            # This file
++-- .gitignore
 ```
 
-Everything is embedded: the 612-entry `vulnwsc.txt` vulnerable device list, all
-original source modules (scanner, connection handler, pixiewps wrapper, WPS PIN
-generator, bruteforcer, Android helpers, logger, utils), and the new diagnostic
-functions — bootstrapped via an in-memory module shim at startup.
+---
+
+## Requirements
+
+- **OS:** Linux (Kali, Parrot, Ubuntu, Debian)
+- **Python:** 3.8+
+- **Root access:** Required
+- **WiFi adapter:** Supports monitor mode
+- **Auto-installed:** pixiewps, reaver, bully, iw, scikit-learn, numpy, joblib
+
+---
+
+## All Flags
+
+```
+Required:
+  -i, --interface      Wireless interface name
+  -b, --bssid          Target AP BSSID
+
+Check Mode:
+  -C, --check BSSID    Check router against vuln list (no attack)
+
+Attack Modes:
+  -p, --pin PIN        Use specific PIN
+  -N, --null-pin       Use null PIN
+  -P, --pixie-dust     Pixie Dust attack
+  -B, --bruteforce     Online bruteforce
+  --pbc                Push button connect
+
+AI Mode:
+  --ai                 Full autonomous mode (scan -> select -> attack)
+
+Install:
+  --install            Install wifi4 globally to /usr/local/bin
+
+Optional:
+  -k, --kill           Kill interfering processes
+  -r, --restore        Restore processes on exit
+  -w, --write          Save credentials to file
+  -l, --loop           Run in loop
+  -c, --clear          Clear screen on scan
+  -a, --all            Show all networks (including WPS off)
+  -d, --delay SEC      Delay between pin attempts
+  -t, --timeout SEC    Timeout for WPS lock retry
+
+Advanced:
+  -F, --pixie-force    Pixiewps --force option
+  -S, --show-pixie     Print pixiewps command
+  -I, --iface-down     Disable interface on exit
+  -M, --mtk-wifi       MediaTek WiFi driver toggle
+  -D, --dont-touch-settings   Skip Android WiFi settings
+  --reverse-scan       Reverse network list order
+  --vuln-list FILE     Custom vulnerable devices file
+  -v, --verbose        Verbose output
+  -h, --help           Show help
+```
+
+---
+
+## How It Works (Simple)
+
+```
+$ wifi4
+
+[*] Using interface: wlan0
+[*] Scanning for WPS networks...
+
+  #  BSSID               CH  SIGNAL  WPS  LOCK  ESSID
+  1  AA:BB:CC:DD:EE:FF    6   -42    v2   No    MyWiFi
+  2  11:22:33:44:55:66   11   -58    v1   Yes   Neighbor
+  3  DE:AD:BE:EF:00:11    1   -71    v2   No    CafeWiFi
+
+Select target: 1
+
+[*] Selected: MyWiFi (AA:BB:CC:DD:EE:FF)
+    Signal: -42 dBm | WPS v2.0 | Locked: False
+
+[AI] Phase 1: Checking vulnerable list...
+[AI] Decision: proceed
+[AI] Trying PIN: 12345670 (Common default)
+[AI] SUCCESS! PIN: 12345670
+
+[AI] Model saved: AI Agent ready (RF, SGD, Q(115), 500 obs)
+```
 
 ---
 
 ## Credits
 
-- **Original OneShot** — WPS attack framework
-- **Wi-PWN / pixiewps** — offline WPS analysis (wiire-a)
-- **Reaver** — WPS brute-force reference implementation
-- **Stefan Viehbock** — WPS vulnerability research ("Brute forcing Wi-Fi Protected Setup", 2011)
-- **WPSpin generators** — OUI-based PIN prediction algorithms
+- **Original:** [_skipmarket/OneShot](https://github.com/skipmarket/OneShot)
+- **Extended:** OneShot-Extended with AI Agent, smart auto-attack, WPS diagnostics
+- **AI:** Hybrid RF + SGD + Q-Learning ensemble
+- **Copyright:** (C) 2026 chkndrp
 
 ---
 
 ## License
 
-GNU General Public License v2.0 (GPLv2) — see the license header in `oneshot.py`.
+For authorized security testing only. Use responsibly.
