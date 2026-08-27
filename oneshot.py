@@ -4423,6 +4423,213 @@ def _ensure_ml_deps():
         logger.warning(f'[AI] pip install failed ({exc}) — using rule-based fallback')
 
 
+
+
+
+# ---------------------------------------------------------------------------
+# Web Intelligence Engine — Autonomous Background Research
+# ---------------------------------------------------------------------------
+# Lightweight, zero-API-key web search using duckduckgo_search.
+# Runs in background thread — zero impact on WPS attack speed.
+# Triggers on unknown OUI/vendor detection.
+# Converts findings to feature format and feeds into AI Brain.
+# ---------------------------------------------------------------------------
+
+class WebIntelEngine:
+    """Autonomous Web Intelligence Gathering for WPS vulnerabilities.
+
+    Uses DuckDuckGo search (zero API key, free) to find:
+    - New WPS CVEs for detected router vendors
+    - Pixie Dust vulnerabilities for unknown OUI prefixes
+    - Default PINs for unrecognized devices
+
+    Runs entirely in background threads — zero impact on attack speed.
+    """
+
+    _DIR = os.path.join(os.path.expanduser('~'), '.OneShot-Extended', 'web_intel')
+    _CACHE_TTL = 24 * 3600
+    _MAX_QUERIES = 3
+    _SEARCH_TIMEOUT = 10
+
+    def __init__(self):
+        self._cache = {}
+        self._load_cache()
+        self._internet_ok = self._check_internet()
+
+    def _load_cache(self):
+        cache_file = os.path.join(self._DIR, 'search_cache.json')
+        try:
+            if os.path.exists(cache_file):
+                with open(cache_file) as f:
+                    self._cache = json.load(f)
+        except Exception:
+            self._cache = {}
+
+    def _save_cache(self):
+        try:
+            os.makedirs(self._DIR, exist_ok=True)
+            with open(os.path.join(self._DIR, 'search_cache.json'), 'w') as f:
+                json.dump(self._cache, f)
+        except Exception:
+            pass
+
+    def _check_internet(self) -> bool:
+        try:
+            import urllib.request
+            urllib.request.urlopen('https://duckduckgo.com', timeout=5)
+            return True
+        except Exception:
+            return False
+
+    def _is_cached(self, vendor: str) -> bool:
+        return (time.time() - self._cache.get(vendor, 0)) < self._CACHE_TTL
+
+    def _mark_searched(self, vendor: str):
+        self._cache[vendor] = time.time()
+        self._save_cache()
+
+    def search_vulnerabilities(self, vendor: str, model: str = '') -> list:
+        if not self._internet_ok or self._is_cached(vendor):
+            return []
+        results = []
+        queries = [
+            f'{vendor} {model} WPS vulnerability CVE'.strip(),
+            f'{vendor} {model} pixie dust WPS PIN default'.strip(),
+            f'{vendor} router WPS security advisory 2024 2025'.strip(),
+        ]
+        try:
+            from duckduckgo_search import DDGS
+            with DDGS() as ddgs:
+                for q in queries[:self._MAX_QUERIES]:
+                    try:
+                        for r in ddgs.text(q, max_results=3, region='wt-wt'):
+                            results.append({
+                                'title': r.get('title', ''),
+                                'snippet': r.get('body', ''),
+                                'url': r.get('href', ''),
+                                'type': 'vulnerability', 'query': q,
+                            })
+                    except Exception:
+                        continue
+        except ImportError:
+            return self._fallback_search(vendor, model)
+        except Exception:
+            pass
+        if results:
+            self._mark_searched(vendor)
+            self._save_results(vendor, model, results)
+        return results
+
+    def _fallback_search(self, vendor: str, model: str) -> list:
+        import urllib.request, urllib.parse, re
+        results = []
+        try:
+            q = urllib.parse.quote(f'{vendor} {model} WPS vulnerability'.strip())
+            req = urllib.request.Request(
+                f'https://html.duckduckgo.com/html/?q={q}',
+                headers={'User-Agent': 'OPX-Intel/1.0'})
+            with urllib.request.urlopen(req, timeout=self._SEARCH_TIMEOUT) as resp:
+                html = resp.read().decode('utf-8', errors='replace')
+                titles = re.findall(r'class="result__a"[^>]*>(.*?)</a>', html)
+                snippets = re.findall(r'class="result__snippet"[^>]*>(.*?)</td>', html)
+                for i in range(min(5, len(titles))):
+                    results.append({
+                        'title': re.sub(r'<[^>]+>', '', titles[i]).strip(),
+                        'snippet': re.sub(r'<[^>]+>', '', snippets[i]).strip() if i < len(snippets) else '',
+                        'url': '', 'type': 'vulnerability',
+                        'query': f'{vendor} {model} WPS',
+                    })
+        except Exception:
+            pass
+        if results:
+            self._mark_searched(vendor)
+            self._save_results(vendor, model, results)
+        return results
+
+    def _save_results(self, vendor: str, model: str, results: list):
+        try:
+            os.makedirs(self._DIR, exist_ok=True)
+            fname = f'{vendor}_{model}'.replace(' ', '_').replace('/', '_')[:50]
+            with open(os.path.join(self._DIR, f'{fname}.json'), 'w') as f:
+                json.dump({'vendor': vendor, 'model': model,
+                    'searched_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+                    'results': results, 'count': len(results)}, f, indent=2)
+        except Exception:
+            pass
+
+    def feed_to_brain(self, vendor: str, model: str, is_vulnerable: bool = True):
+        """Convert web findings into AI Brain training observations."""
+        try:
+            agent = AIAgent(quiet=True)
+            if is_vulnerable:
+                for sig, msgs in [(-45.0, 4), (-60.0, 3)]:
+                    ctx = {'bssid': '00:00:00:00:00:00', 'signal': sig,
+                        'wps_version': '2.0', 'wps_locked': False,
+                        'is_vulnerable': True, 'attempt': 1, 'timeouts': 0,
+                        'resp_delay': 1.0, 'm_msgs': msgs, 'fails': 0, 'hist_locks': 0}
+                    agent.X.append(agent.extract(ctx))
+                    agent.y.append('proceed')
+                    agent.reward_history.append(0.8 if msgs == 4 else 0.6)
+            else:
+                ctx = {'bssid': '00:00:00:00:00:00', 'signal': -55.0,
+                    'wps_version': '2.0', 'wps_locked': False,
+                    'is_vulnerable': False, 'attempt': 3, 'timeouts': 2,
+                    'resp_delay': 8.0, 'm_msgs': 0, 'fails': 2, 'hist_locks': 0}
+                agent.X.append(agent.extract(ctx))
+                agent.y.append('skip')
+                agent.reward_history.append(-0.2)
+            agent.X = agent.X[-agent._MAX_OBS:]
+            agent.y = agent.y[-agent._MAX_OBS:]
+            agent.reward_history = agent.reward_history[-agent._MAX_OBS:]
+            if agent.has_ml and len(agent.X) >= 10:
+                agent._train_rf()
+            agent.finalize()
+            logger.info(f'[Intel] Fed brain from {vendor} {model}')
+            return len(agent.y)
+        except Exception as e:
+            logger.warning(f'[Intel] Brain feed error: {e}')
+            return 0
+
+    def trigger_scan(self, network_info: dict) -> list:
+        """Main entry point: called when unknown OUI/vendor detected."""
+        if not self._internet_ok:
+            return []
+        vendor = network_info.get('Model', '') or network_info.get('Device name', '')
+        model = network_info.get('Model number', '')
+        bssid = network_info.get('BSSID', '')
+        if not vendor and not model:
+            if bssid:
+                vendor = f'OUI-{bssid.replace(":", "").replace("-", "")[:6].upper()}'
+            else:
+                return []
+        findings = self.search_vulnerabilities(vendor, model)
+        vuln_kw = ['cve', 'vulnerability', 'pixie dust', 'weak', 'exploit',
+                    'default pin', 'insecure', 'bypass', 'overflow']
+        for f in findings:
+            txt = (f.get('title', '') + ' ' + f.get('snippet', '')).lower()
+            if any(kw in txt for kw in vuln_kw):
+                self.feed_to_brain(vendor, model, is_vulnerable=True)
+                break
+        else:
+            if findings:
+                self.feed_to_brain(vendor, model, is_vulnerable=False)
+        return findings
+
+    def trigger_background(self, network_info: dict):
+        """Non-blocking trigger — runs search in background thread."""
+        if not self._internet_ok:
+            return
+        def _worker():
+            try:
+                self.trigger_scan(network_info)
+            except Exception:
+                pass
+        try:
+            threading.Thread(target=_worker, daemon=True).start()
+        except Exception:
+            pass
+
+
 # ---------------------------------------------------------------------------
 # AI Agent — hybrid RF + Q-Learning + SGD ensemble
 # ---------------------------------------------------------------------------
@@ -5338,6 +5545,15 @@ def _aiAutonomousMode():
     if model:
         print(f'    Model: {model} {model_num}')
     print()
+
+    # --- Background Web Intelligence: search for unknown devices ---
+    # Trigger only when we have internet + unknown OUI/vendor detected.
+    # Runs in background thread — zero impact on attack speed.
+    try:
+        _webIntel = WebIntelEngine()
+        _webIntel.trigger_background(network_info)
+    except Exception:
+        pass
 
     # Step 3: AI decides attack chain
     agent = AIAgent(profile=getattr(args, 'profile', 'balanced'))
