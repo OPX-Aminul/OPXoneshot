@@ -104,6 +104,32 @@ sudo python3 oneshot.py --install
 #   /usr/local/bin/oneshot-ai/ (script + models)
 ```
 
+### Community Model / Training Data
+
+```bash
+# Export your training data (share on GitHub so others learn from it)
+python3 oneshot.py --export
+
+# Import another user's training data (merge into your model)
+python3 oneshot.py --import-data training_data_20260827.json
+
+# Pull the latest community model from GitHub
+python3 oneshot.py --pull-model
+
+# Push your trained model back to GitHub
+python3 oneshot.py --push-model
+
+# A/B training profiles (how aggressive the AI explores)
+python3 oneshot.py --ai --profile conservative
+python3 oneshot.py --ai --profile balanced     # default
+python3 oneshot.py --ai --profile aggressive
+```
+
+Every user's `record()` calls are saved to `~/.OneShot-Extended/training_log.json`
+with a unique user id. Share your `--export` file and merge others' data with
+`--import-data` so the model improves from everyone's experience.
+```
+
 ---
 
 ## How the AI Works
