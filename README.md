@@ -17,7 +17,22 @@ automatic disabled-WPS detection, and a unified single-file architecture.
 
 ## Features
 
-### Core Attack Modes
+### Smart Auto-Attack (Default Mode)
+
+When you run `python oneshot.py -i wlan0` or `python oneshot.py -i wlan0 -b BSSID`
+**without** any explicit attack flags (`-P`, `-B`, `-p`, `-N`, `--pbc`), the tool
+automatically runs the full attack chain:
+
+```
+1. Check BSSID against the 612-entry vulnerable device list (OUI match)
+   → If matched: try each probable PIN from the list
+2. If list PINs failed → Pixie Dust attack (offline PIN recovery)
+3. If Pixie Dust failed → Online bruteforce (full 8-digit search)
+```
+
+You only need to **select a network** — the tool decides the best attack strategy.
+
+### Explicit Attack Modes (override auto)
 
 | Flag | Mode | Description |
 |------|------|-------------|
@@ -26,6 +41,9 @@ automatic disabled-WPS detection, and a unified single-file architecture.
 | `-p PIN` | Known PIN | Test a specific PIN (from prediction, leaked database, or manual input) |
 | `-N` | Null PIN | Try the null (all-zeros) PIN — effective on some early WPS implementations |
 | `--pbc` | Push Button | WPS Push Button Connect (PBC) mode |
+
+> When any of these flags is given, auto-attack is **disabled** and only the
+> specified mode is used.
 
 ### WPS State Diagnostics (New)
 
@@ -151,14 +169,7 @@ CONFIG_WPS=y make
 ### 4. Download oneshot.py
 
 ```bash
-wget https://raw.githubusercontent.com/yourusername/OPXoneshot/main/oneshot.py
-chmod +x oneshot.py
-```
-
-Or clone:
-
-```bash
-git clone https://github.com/yourusername/OPXoneshot.git
+git clone https://github.com/OPX-Aminul/OPXoneshot.git
 cd OPXoneshot
 ```
 
@@ -166,19 +177,32 @@ cd OPXoneshot
 
 ## Usage
 
-### Basic Pixie Dust Attack (scan and select)
+### Smart Auto-Attack: Scan → Select → Done
 
 ```bash
-sudo python3 oneshot.py -i wlan0 -P
+sudo python3 oneshot.py -i wlan0
 ```
 
-### Target a Specific BSSID with Pixie Dust
+The tool scans, shows a list, you select one — and it automatically:
+1. Checks the vulnerable device list for your AP's MAC
+2. Tries the list PIN if matched
+3. Falls back to Pixie Dust, then bruteforce
+
+### Smart Auto-Attack: Target a Specific BSSID
+
+```bash
+sudo python3 oneshot.py -i wlan0 -b AA:BB:CC:11:22:33
+```
+
+Same auto chain — no need to specify `-P` or `-B`.
+
+### Explicit Pixie Dust (override auto)
 
 ```bash
 sudo python3 oneshot.py -i wlan0 -b AA:BB:CC:11:22:33 -P
 ```
 
-### Online Brute-force (full 8-digit PIN search)
+### Explicit Online Bruteforce (override auto)
 
 ```bash
 sudo python3 oneshot.py -i wlan0 -b AA:BB:CC:11:22:33 -B

