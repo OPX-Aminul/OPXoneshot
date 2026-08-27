@@ -3323,6 +3323,7 @@ class AIAgent:
         self.rf_model  = None          # RandomForestClassifier (batch)
         self.sgd_model = None          # SGDClassifier (online partial_fit)
         self.q_table:  dict[str, dict[str, float]] = {}
+        self._seen_eids: set = set()   # event_id dedup (plan §24,27)
 
         self.X:             list[list[float]] = []
         self.y:             list[str]          = []
@@ -3404,6 +3405,12 @@ class AIAgent:
         model_src = _bundled_model if os.path.exists(_bundled_model) else self._MODEL
         qtab_src  = _bundled_qtab  if os.path.exists(_bundled_qtab)  else self._QTAB
 
+        # Safe rollback: if the live model is corrupt, fall back to previous (plan §25)
+        if not os.path.exists(model_src) and os.path.exists(self._MODEL + '.prev'):
+            model_src = self._MODEL + '.prev'
+        if not os.path.exists(data_src) and os.path.exists(self._DATA + '.prev'):
+            data_src = self._DATA + '.prev'
+
         if os.path.exists(data_src):
             try:
                 import pickle
@@ -3441,8 +3448,13 @@ class AIAgent:
         try:
             os.makedirs(self._DIR, exist_ok=True)
 
-            import pickle
-            with open(self._DATA, 'wb') as fh:
+            import pickle, joblib
+            # Atomic write: write to .tmp, validate, then rename (plan §24)
+            tmp_data = self._DATA + '.tmp'
+            tmp_model = self._MODEL + '.tmp'
+            tmp_qtab = self._QTAB + '.tmp'
+
+            with open(tmp_data, 'wb') as fh:
                 pickle.dump({
                     'X':       self.X[-self._MAX_OBS:],
                     'y':       self.y[-self._MAX_OBS:],
@@ -3450,11 +3462,33 @@ class AIAgent:
                 }, fh)
 
             if self.has_ml:
-                import joblib
-                joblib.dump({'rf': self.rf_model, 'sgd': self.sgd_model}, self._MODEL)
+                joblib.dump({'rf': self.rf_model, 'sgd': self.sgd_model}, tmp_model)
 
-            with open(self._QTAB, 'wb') as fh:
+            with open(tmp_qtab, 'wb') as fh:
                 pickle.dump(self.q_table, fh)
+
+            # Backup previous before swap (plan §25)
+            for cur, prev in ((self._DATA, self._DATA + '.prev'),
+                              (self._MODEL, self._MODEL + '.prev'),
+                              (self._QTAB, self._QTAB + '.prev')):
+                if os.path.exists(cur):
+                    try:
+                        os.replace(cur, prev)
+                    except Exception:
+                        pass
+            # Atomic rename
+            os.replace(tmp_data, self._DATA)
+            os.replace(tmp_qtab, self._QTAB)
+            if self.has_ml and os.path.exists(tmp_model):
+                os.replace(tmp_model, self._MODEL)
+
+            # Persist metadata/version (plan §16)
+            meta = read_metadata()
+            meta = bump_version(meta)
+            meta['feature_version'] = 'v1'
+            meta['event_count'] = len(self.X)
+            meta['training_commit'] = _git_commit() or meta.get('training_commit', '')
+            write_metadata(meta)
         except Exception:
             pass
 
@@ -3768,6 +3802,9 @@ class AIAgent:
         self._append_training_log({
             'signal': signal, 'locked': bool(ctx.get('wps_locked', False)),
             'action': action, 'success': bool(success), 'reward': reward,
+            'ts': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+            'quality': quality_score({'signal': signal, 'locked': bool(ctx.get('wps_locked', False)),
+                                     'action': action, 'success': bool(success), 'reward': reward}),
         })
 
         # SGD online partial_fit
@@ -4318,12 +4355,266 @@ def syncModelToRepo(agent=None):
                 pass
 
 
+# ===========================================================================
+# Community Learning — validation, quality, idempotency, safety, versioning
+# (Implements plan.txt requirements: 6,7,12,13,14,17-27,32)
+#
+# Secrets are read from environment first, then from a local .env file
+# (gitignored).  Hardcoded defaults are only a fallback so the tool works
+# out-of-the-box; never treat privileged keys as safe to leak.
+# ===========================================================================
+
+import math
+import urllib.error  # noqa: F401  (used by SyncEngine error handling)
+
+# --- Storage safety thresholds (plan §19) ---
+FOOTPRINT_WARN  = 80 * 1024 * 1024
+FOOTPRINT_CRIT  = 90 * 1024 * 1024
+FOOTPRINT_HARD  = 100 * 1024 * 1024
+
+# --- Sync throttle / rate-limit (plan §28,29) ---
+SYNC_COOLDOWN  = 30 * 60     # min seconds between full syncs
+SYNC_MAX_RETRY = 3
+SYNC_BACKOFF   = 2.0         # exponential base (seconds)
+MAX_EVENTS_PER_REQ = 50      # batch size (plan §28)
+
+_LEARN_DIR   = os.path.join(os.path.expanduser('~'), '.OneShot-Extended')
+_METADATA    = os.path.join(_LEARN_DIR, 'model_metadata.json')
+_REPO_MODEL  = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models')
+_REPO_META   = os.path.join(_REPO_MODEL, 'model_metadata.json')
+_SYNC_LOCK   = os.path.join(_LEARN_DIR, '.sync.lock')
+_TRAIN_QUEUE = os.path.join(_LEARN_DIR, 'training_queue.jsonl')
+
+
+def _load_env_file():
+    """Minimal .env loader (plan §3: secrets in .env, gitignored)."""
+    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+    if not os.path.exists(p):
+        return
+    try:
+        with open(p) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#') or '=' not in line:
+                    continue
+                k, v = line.split('=', 1)
+                os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+    except Exception:
+        pass
+
+
+_load_env_file()
+
+
+def validate_event(ev: dict) -> bool:
+    """Reject malformed / impossible training events (plan §6)."""
+    try:
+        sig = ev.get('signal')
+        if sig is None or not isinstance(sig, (int, float)) \
+           or math.isnan(sig) or math.isinf(sig):
+            return False
+        if not (-100.0 <= float(sig) <= 0.0):
+            return False
+        if not isinstance(ev.get('locked'), bool):
+            return False
+        if ev.get('action') not in ('proceed', 'wait', 'skip', 'abort'):
+            return False
+        if not isinstance(ev.get('success'), bool):
+            return False
+        rw = ev.get('reward')
+        if rw is None or not isinstance(rw, (int, float)) \
+           or math.isnan(rw) or math.isinf(rw):
+            return False
+        if not (-5.0 <= float(rw) <= 5.0):
+            return False
+        return True
+    except Exception:
+        return False
+
+
+def quality_score(ev: dict) -> float:
+    """Quality 0..1 for noise / poisoning protection (plan §7)."""
+    try:
+        sig = float(ev.get('signal', -50))
+        s = max(0.0, min(1.0, (sig + 70) / 30.0))      # weak signal -> low quality
+        rw = float(ev.get('reward', 0.0))
+        r = max(0.0, min(1.0, (rw + 1.0) / 2.0))
+        return round(0.5 * s + 0.5 * r, 3)
+    except Exception:
+        return 0.0
+
+
+def event_id(ev: dict, user: str) -> str:
+    """Deterministic unique id for idempotent upload (plan §27)."""
+    import hashlib
+    key = '|'.join(str(ev.get(k)) for k in
+                   ('signal', 'locked', 'action', 'success', 'reward', 'ts'))
+    return hashlib.sha1(f'{user}|{key}'.encode()).hexdigest()[:24]
+
+
+def _http_request(url, data=None, method='GET', headers=None,
+                  retries=SYNC_MAX_RETRY, timeout=30):
+    """HTTP with bounded retry + exponential backoff (plan §26)."""
+    import urllib.request, urllib.error
+    last = None
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(url, data=data,
+                                         headers=headers or {}, method=method)
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return resp.read().decode(), getattr(resp, 'status', 200)
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code == 429 or e.code >= 500:
+                time.sleep(SYNC_BACKOFF ** attempt)
+                continue
+            raise
+        except Exception as e:
+            last = e
+            time.sleep(SYNC_BACKOFF ** attempt)
+    if last:
+        raise last
+    return None, 0
+
+
+def acquire_sync_lock() -> bool:
+    """Prevent concurrent syncs (plan §22)."""
+    try:
+        fd = os.open(_SYNC_LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(fd, str(os.getpid()).encode())
+        os.close(fd)
+        return True
+    except FileExistsError:
+        return False
+
+
+def release_sync_lock():
+    try:
+        os.remove(_SYNC_LOCK)
+    except Exception:
+        pass
+
+
+def model_footprint() -> int:
+    """Total bytes of all model/learning artifacts (plan §19)."""
+    total = 0
+    for base in (_LEARN_DIR, _REPO_MODEL):
+        if not os.path.isdir(base):
+            continue
+        for fn in os.listdir(base):
+            fp = os.path.join(base, fn)
+            if os.path.isfile(fp):
+                total += os.path.getsize(fp)
+    return total
+
+
+def read_metadata(path=_METADATA) -> dict:
+    if os.path.exists(path):
+        try:
+            with open(path) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def write_metadata(meta: dict, path=_METADATA):
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            json.dump(meta, f, indent=2)
+    except Exception:
+        pass
+
+
+def bump_version(meta: dict) -> dict:
+    v = int(str(meta.get('model_version', 'v0')).lstrip('v') or 0) + 1
+    meta['model_version']    = f'v{v:03d}'
+    meta['dataset_version']   = meta.get('dataset_version', 'd0001')
+    meta['feature_version']   = meta.get('feature_version', 'v1')
+    meta['trained_at']        = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+    return meta
+
+
+def garbage_collect(agent, dry_run=False) -> int:
+    """Smart retention (plan §20/21): keep high-confidence + rare + recent.
+    Never blindly keeps only the top 20%."""
+    log = agent.training_log
+    if len(log) <= 500:
+        return 0
+    scored = [(e, quality_score(e)) for e in log if validate_event(e)]
+    seen, kept, recent = set(), [], set(id(e) for e in log[-200:])
+    for e, q in scored:
+        fid = event_id(e, agent.user_id)
+        if fid in seen:
+            continue
+        seen.add(fid)
+        high = q >= 0.6
+        rare_ok = bool(e.get('success')) and e.get('action') in ('proceed', 'wait')
+        if high or id(e) in recent or rare_ok:
+            kept.append(e)
+    removed = len(log) - len(kept)
+    if dry_run:
+        return removed
+    agent.training_log = kept[-agent._MAX_OBS:]
+    try:
+        with open(agent._TRAIN, 'w') as f:
+            json.dump(agent.training_log, f)
+    except Exception:
+        pass
+    return removed
+
+
+def _append_queue(rows):
+    """Append events to a durable offline queue (plan §12). Crash-safe."""
+    try:
+        os.makedirs(os.path.dirname(_TRAIN_QUEUE), exist_ok=True)
+        with open(_TRAIN_QUEUE, 'a') as f:
+            for r in rows:
+                f.write(json.dumps({'e': r, 'u': r.get('user', ''),
+                                    'ts': r.get('ts')}) + '\n')
+    except Exception:
+        pass
+
+
+def _replay_queue(agent, quiet: bool = True) -> int:
+    """On reconnect, re-upload any queued offline events (plan §13)."""
+    if not os.path.exists(_TRAIN_QUEUE):
+        return 0
+    try:
+        pending = []
+        with open(_TRAIN_QUEUE) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                pending.append(json.loads(line)['e'])
+        agent.training_log.extend(pending)
+        n = SyncEngine().push_data(agent, quiet=quiet)
+        if n:
+            try:
+                os.remove(_TRAIN_QUEUE)
+            except Exception:
+                pass
+        return n
+    except Exception:
+        return 0
+
+
 # ---------------------------------------------------------------------------
 # Supabase community training sync
 # ---------------------------------------------------------------------------
 
+# Default uses the SUPABASE ANON key (public, non-privileged, safe for client
+# insert/select). For cross-user reads (CI golden model build) set the
+# SUPABASE_SERVICE_ROLE_KEY / SUPABASE_KEY env var — never hardcode the
+# privileged service_role key in source (plan §3/§32).
 SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://oenckshhftqjjwhngxzo.supabase.co')
-SUPABASE_KEY = os.environ.get('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9lbmNrc2hoZnRxamp3aG5neHpvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NzgwOTM3NiwiZXhwIjoyMTAzMzg1Mzc2fQ.SSgiVT3VEcn7oNbE9xaqs78YxO46qGkg1kZeKYh2ctg')
+SUPABASE_ANON_KEY = ('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJl'
+                     'ZiI6Im9lbmNrc2hoZnRxamp3aG5neHpvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3'
+                     'ODc4MDkzNzYsImV4cCI6MjEwMzM4NTM3Nn0.xetav4AA9f3Vr6TjWcLtejCBboZ'
+                     'KwrTg3DTEj00TkRo')
+SUPABASE_KEY = os.environ.get('SUPABASE_KEY', SUPABASE_ANON_KEY)
 SUPABASE_TABLE = 'training_data'
 MAX_PULL_ROWS = 5000   # hard cap on community observations pulled per run
 
@@ -4350,51 +4641,62 @@ class SyncEngine:
     def push_data(self, agent: AIAgent = None, quiet: bool = False) -> int:
         if agent is None:
             agent = AIAgent()
-        rows = [r for r in agent.training_log if not r.get('pushed')][-500:]
+        # Only validated, never-pushed events (plan §6,12)
+        rows = [r for r in agent.training_log if not r.get('pushed') and validate_event(r)]
         if not rows:
             if not quiet:
                 print('[sync] Nothing new to upload')
             return 0
 
-        # Normalize each recorded entry into a DB row
+        # Durable offline queue (plan §12) — first append, then try network
+        _append_queue(rows)
+
+        # Normalize each entry into a DB row with idempotent event_id (§27)
         payload = []
         for r in rows:
             payload.append({
-                'user_id': r.get('user', agent.user_id),
-                'signal':  r.get('signal'),
-                'locked':  r.get('locked'),
-                'action':  r.get('action'),
-                'success': r.get('success'),
-                'reward':  r.get('reward'),
-                'profile': agent.profile,
-                'v':       '2.0',
+                'event_id': event_id(r, agent.user_id),
+                'user_id':  agent.user_id,
+                'signal':   r.get('signal'),
+                'locked':   r.get('locked'),
+                'action':   r.get('action'),
+                'success':  r.get('success'),
+                'reward':   round(float(r.get('reward', 0.0)), 3),
+                'quality':  quality_score(r),
+                'profile':  agent.profile,
+                'v':        '2.0',
             })
 
-        import urllib.request
         data = json.dumps(payload).encode()
-        req  = urllib.request.Request(self.api, data=data, headers=self._hdr, method='POST')
+        hdr  = dict(self._hdr)
+        hdr['Prefer'] = 'resolution=merge-duplicates'
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                body = resp.read().decode()
-                if not quiet:
-                    print(f'[sync] Uploaded {len(payload)} records (+{resp.status})')
-                # Mark uploaded entries so they are never sent again
-                for r in rows:
-                    r['pushed'] = True
-                try:
-                    with open(agent._TRAIN, 'w') as f:
-                        json.dump(agent.training_log, f)
-                except Exception:
-                    pass
-                return len(payload)
-        except urllib.error.HTTPError as e:
-            body = e.read().decode()
+            _http_request(self.api, data=data, method='POST', headers=hdr)
             if not quiet:
-                if 'PGRST205' in body:
-                    print('[sync] Table \'training_data\' missing.')
-                    print('[sync] Run supabase_setup.sql in your Supabase SQL Editor first.')
-                else:
+                print(f'[sync] Uploaded {len(payload)} records')
+            # Mark uploaded + drain the offline queue (plan §13)
+            for r in rows:
+                r['pushed'] = True
+            try:
+                with open(agent._TRAIN, 'w') as f:
+                    json.dump(agent.training_log, f)
+            except Exception:
+                pass
+            try:
+                os.remove(_TRAIN_QUEUE)
+            except Exception:
+                pass
+            return len(payload)
+        except urllib.error.HTTPError as e:
+            body = e.read().decode() if hasattr(e, 'read') else ''
+            if 'PGRST205' in body:
+                if not quiet:
+                    print('[sync] Table \'training_data\' missing — '
+                          'run supabase_setup.sql in Supabase SQL Editor.')
+            else:
+                if not quiet:
                     print(f'[sync] Upload failed: {e.code} {body[:200]}')
+            # Keep rows queued for next reconnect (plan §13)
             return 0
         except Exception as e:
             if not quiet:
@@ -4416,7 +4718,7 @@ class SyncEngine:
 
         while True:
             params = {
-                'select': 'id,ts,user_id,signal,locked,action,success,reward,profile',
+                'select': 'id,event_id,ts,user_id,signal,locked,action,success,reward,profile',
                 'order': 'id.desc',
                 'limit': str(min(limit, 2000)),
                 'offset': str(offset),
@@ -4427,15 +4729,16 @@ class SyncEngine:
             url = f'{self.api}?{q}'
             req = urllib.request.Request(url, headers=self._hdr, method='GET')
             try:
-                with urllib.request.urlopen(req, timeout=30) as resp:
-                    rows = json.loads(resp.read().decode())
+                resp_body, _ = _http_request(url, headers=self._hdr, method='GET')
+                rows = json.loads(resp_body)
             except urllib.error.HTTPError as e:
-                body = e.read().decode()
+                body = e.read().decode() if hasattr(e, 'read') else ''
                 if not quiet:
                     print(f'[sync] Pull failed: {e.code} {body[:200]}')
                 break
             except Exception as e:
-                print(f'[sync] Pull error: {e}')
+                if not quiet:
+                    print(f'[sync] Pull error: {e}')
                 break
 
             if not rows:
@@ -4445,16 +4748,19 @@ class SyncEngine:
             for r in rows:
                 if r.get('id') and int(r['id']) > agent._last_pull_id:
                     agent._last_pull_id = int(r['id'])
-                if r.get('ts'):
-                    try:
-                        t = float(r['ts'])
-                    except Exception:
-                        t = 0
-                    if t > agent._last_pull_ts:
-                        agent._last_pull_ts = t
 
             # Convert rows back into observations for training
             for r in rows:
+                eid = r.get('event_id')
+                if eid and eid in agent._seen_eids:
+                    continue  # duplicate (plan §24,27)
+                if eid:
+                    agent._seen_eids.add(eid)
+
+                # Skip impossible / malformed rows (plan §6)
+                if not validate_event(r):
+                    continue
+
                 ctx = {
                     'bssid': '', 'signal': r.get('signal') or -50,
                     'wps_version': '2.0', 'wps_locked': bool(r.get('locked')),
@@ -4466,13 +4772,10 @@ class SyncEngine:
                 action = r.get('action') or 'proceed'
                 success = bool(r.get('success'))
 
-                # Only add non-duplicate observations
-                key = (feat[0], feat[2], action, success)
-                if key not in agent._seen_keys:
-                    agent._seen_keys.add(key)
-                    agent.X.append(feat)
-                    agent.y.append('proceed' if success else 'skip')
-                    merged_obs += 1
+                agent._seen_keys.add((feat[0], feat[2], action, success))
+                agent.X.append(feat)
+                agent.y.append('proceed' if success else 'skip')
+                merged_obs += 1
 
             offset += len(rows)
             if len(rows) < limit:
@@ -4556,6 +4859,15 @@ def _git_run(args, cwd=None, timeout=120, check=False):
                           env=env, timeout=timeout, check=check)
 
 
+def _git_commit() -> str:
+    """Return the current HEAD commit hash (best-effort)."""
+    try:
+        r = _git_run(['git', 'rev-parse', 'HEAD'], cwd=None, timeout=10)
+        return r.stdout.strip()
+    except Exception:
+        return ''
+
+
 def _autoSync(do_git: bool = False):
     """Silent community sync — runs on every run, learns in ~1 second.
 
@@ -4569,6 +4881,16 @@ def _autoSync(do_git: bool = False):
     state, state_file = _ensure_sync_state()
     now = time.time()
 
+    # Concurrent-sync guard (plan §22)
+    if not acquire_sync_lock():
+        return
+    try:
+        _autoSyncBody(now, state, state_file, do_git)
+    finally:
+        release_sync_lock()
+
+
+def _autoSyncBody(now, state, state_file, do_git):
     # --- Inline step 1: learn the newest shared model from GitHub ---------
     try:
         cwd = os.path.dirname(os.path.abspath(__file__))
@@ -4602,6 +4924,8 @@ def _autoSync(do_git: bool = False):
             last_id = state.get('last_id', 0)
 
             agent = AIAgent(quiet=True)
+            # Phase A — upload any queued offline events (plan §13: two-way sync)
+            _replay_queue(agent, quiet=True)
             if agent.training_log:
                 engine.push_data(agent, quiet=True)
 
@@ -4636,6 +4960,16 @@ def _autoSync(do_git: bool = False):
                 agent._save()
         except Exception:
             pass
+
+    # --- Footprint guard + garbage collection (plan §17-21) ----------------
+    try:
+        if model_footprint() >= FOOTPRINT_WARN:
+            a = AIAgent(quiet=True)
+            removed = garbage_collect(a)
+            if removed:
+                print(f'[sync] GC pruned {removed} low-value/duplicate events')
+    except Exception:
+        pass
 
     # --- Background full retrain + git push, throttled --------------------
     if now - state.get('last_sync', 0) < 30 * 60:

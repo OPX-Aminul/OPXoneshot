@@ -1,0 +1,1171 @@
+MASTER IMPLEMENTATION PROMPT — OPX OneShot
+
+Lightweight Community Learning Sync + Two-Way Offline Sync + Automated Golden Model Retraining
+
+তুমি এখন "OPX OneShot" GitHub repository-এর জন্য একজন Senior Python/ML Engineer + MLOps Engineer + Backend Engineer + DevOps Engineer হিসেবে কাজ করবে।
+
+Repository:
+
+- GitHub Repository: "OPX-Aminul/OPXoneshot"
+- Repository URL: ব্যবহারকারীর প্রদত্ত GitHub URL
+- Supabase Project URL: ব্যবহারকারীর প্রদত্ত Supabase URL
+
+---
+
+1. PRIMARY OBJECTIVE
+
+প্রজেক্টে একটি অত্যন্ত lightweight কিন্তু production-grade Community Learning Sync System তৈরি করতে হবে।
+
+মূল ধারণা:
+
+ডিভাইস → ছোট Training Event → Supabase → Delta Pull → Local Partial Learning → Periodic Global Retraining → Golden Model → নতুন/পুরোনো সব User
+
+কখনোই প্রতিটি user-এর সম্পূর্ণ ML model Supabase-এ upload করা যাবে না।
+
+শুধুমাত্র:
+
+- attack metrics
+- extracted features
+- prediction/result
+- success/fail state
+- confidence
+- প্রয়োজনীয় metadata
+- timestamp
+- model/data version
+
+এর মতো ছোট training events sync হবে।
+
+---
+
+2. ABSOLUTE REQUIREMENTS
+
+নিচের requirement-এর কোনোটি বাদ দেওয়া যাবে না।
+
+MUST HAVE
+
+1. Lightweight Supabase learning-data synchronization
+2. Delta Pulling
+3. Local "partial_fit()" learning
+4. Offline-first operation
+5. Local ".joblib" fallback
+6. Background synchronization when internet returns
+7. Two-way synchronization
+8. Offline training-log upload
+9. Global model synchronization
+10. Periodic Golden Model retraining
+11. GitHub Actions automation
+12. Data validation
+13. Noise filtering
+14. Data poisoning protection
+15. Model versioning
+16. Dataset/version tracking
+17. 100 MB storage protection
+18. Automatic cleanup/garbage collection
+19. Model compression
+20. Safe rollback
+21. Atomic model replacement
+22. Concurrent sync protection
+23. Retry/backoff
+24. Duplicate-event protection
+25. Idempotent synchronization
+26. Secure Supabase access
+27. Secure GitHub automation
+28. No unnecessary heavyweight dependency
+29. Existing project functionality must remain intact
+30. Existing credentials/configuration supplied by the project owner must not be arbitrarily removed or ignored.
+
+---
+
+3. IMPORTANT CREDENTIAL SECURITY RULE
+
+The project owner has supplied GitHub and Supabase credentials/configuration separately.
+
+DO NOT:
+
+- delete them
+- ignore them
+- replace them with fake credentials
+- invent new credentials
+- commit privileged secrets into Git
+- hardcode privileged secrets directly inside Python source
+- expose secrets in logs
+- print tokens during debugging
+
+Instead:
+
+- GitHub PAT → GitHub Actions Secret / repository secret
+- Supabase "service_role" → GitHub Actions Secret / secure backend environment variable
+- Supabase "anon/public" key → only where client-side/public access is actually appropriate
+- Supabase URL → environment configuration
+- Local development → ".env" / secure environment loading
+- ".env" must be added to ".gitignore"
+
+IMPORTANT:
+
+All credentials supplied by the project owner are configuration inputs that must be preserved and used appropriately. Their values must never be leaked into source control, logs, generated documentation, or public build artifacts.
+
+If an existing project already contains a credential mechanism, integrate with it rather than unnecessarily replacing it.
+
+---
+
+4. LIGHTWEIGHT LEARNING SYNC
+
+User 2 কাজ করলে পুরো model upload করা যাবে না।
+
+Instead, একটি ছোট JSON event তৈরি হবে।
+
+Example conceptual structure:
+
+{
+  "features": [13 feature values],
+  "result": "success",
+  "confidence": 0.94,
+  "timestamp": "...",
+  "model_version": "...",
+  "feature_version": "v1"
+}
+
+Actual schema project-এর existing ML implementation অনুযায়ী নির্ধারণ করবে।
+
+একটি event ideally কয়েক KB-এর মধ্যে থাকবে।
+
+---
+
+5. SUPABASE DATA ARCHITECTURE
+
+একটি dedicated learning-events table তৈরি/ব্যবহার করতে হবে।
+
+Suggested conceptual fields:
+
+- id
+- event_id
+- user/device identifier
+- features JSON/JSONB
+- result/label
+- confidence
+- timestamp
+- feature_version
+- model_version
+- created_at
+
+প্রয়োজনে:
+
+- quality_score
+- validation_status
+- source
+- sync_status
+- processed_at
+
+ব্যবহার করা যেতে পারে।
+
+প্রতিটি event-এর একটি deterministic/unique "event_id" থাকতে হবে।
+
+এটি duplicate upload প্রতিরোধ করবে।
+
+---
+
+6. DATA VALIDATION
+
+Supabase-এ data insert করার আগে local validation চালাতে হবে।
+
+Reject/flag করতে হবে:
+
+- malformed feature arrays
+- missing required fields
+- invalid numeric values
+- NaN/Infinity
+- impossible feature ranges
+- invalid labels
+- corrupted timestamps
+- duplicate event IDs
+- suspiciously repetitive events
+- obviously abnormal data
+
+কোনো single user যেন অসীম পরিমাণ garbage event upload করতে না পারে।
+
+---
+
+7. DATA NOISE & MODEL POISONING PROTECTION
+
+Community learning-এর সবচেয়ে গুরুত্বপূর্ণ সমস্যা হলো:
+
+একজন ভুল/দূষিত user-এর data যেন পুরো global model নষ্ট করতে না পারে।
+
+তাই প্রতিটি event-এর quality score তৈরি করতে হবে।
+
+Possible factors:
+
+- valid feature range
+- prediction confidence
+- result consistency
+- duplicate frequency
+- user/session history
+- anomalous pattern detection
+- repeated identical failures
+- impossible combinations
+
+Low-quality event:
+
+- reject অথবা quarantine
+
+Medium-quality event:
+
+- low weight
+
+High-quality event:
+
+- normal training weight
+
+একজন user-এর data যেন disproportionate influence না পায়।
+
+---
+
+8. DELTA PULLING
+
+Local script প্রতিবার সম্পূর্ণ dataset download করবে না।
+
+Local state-এ রাখতে হবে:
+
+last_synced_timestamp
+
+Script Supabase থেকে শুধুমাত্র:
+
+created_at > last_synced_timestamp
+
+এরপরের events fetch করবে।
+
+Default batch:
+
+- 10 events
+- অথবা 20 events
+
+প্রয়োজনে pagination থাকবে।
+
+একটি sync operation ideally কয়েক KB data-তেই শেষ হবে।
+
+---
+
+9. LOCAL PARTIAL LEARNING
+
+নতুন validated events পাওয়া গেলে local model update করতে হবে।
+
+যদি existing model:
+
+"SGDClassifier"
+
+ব্যবহার করে, তাহলে compatible "partial_fit()" pipeline ব্যবহার করো।
+
+প্রথম training-এর সময় class initialization নিশ্চিত করতে হবে।
+
+যদি project-এর model architecture SGDClassifier-এর উপযোগী না হয়, তাহলে existing ML architecture analyse করে সবচেয়ে lightweight incremental-learning-compatible approach নির্বাচন করো।
+
+IMPORTANT:
+
+শুধু "partial_fit()" আছে বলেই arbitrary model-এ এটি ব্যবহার করা যাবে না।
+
+---
+
+10. CATASTROPHIC FORGETTING PROTECTION
+
+শুধু নতুন 10/20 event দিয়ে model update করে পুরোনো knowledge সম্পূর্ণ ভুলে যাওয়া যাবে না।
+
+তাই প্রয়োজন হলে:
+
+- replay buffer
+- representative historical samples
+- weighted incremental training
+- class balancing
+- bounded local memory
+
+ব্যবহার করতে হবে।
+
+Local update-এর উদ্দেশ্য:
+
+New Knowledge + Existing Knowledge → Stable Updated Local Model
+
+---
+
+11. OFFLINE-FIRST MODE
+
+Supabase unavailable হলে application কখনো crash করবে না।
+
+Flow:
+
+Run
+ ↓
+Load local model
+ ↓
+Try Supabase
+ ↓
+Unavailable?
+ ↓
+Continue locally
+ ↓
+Store training events locally
+ ↓
+Finish normally
+
+Local training অবশ্যই internet ছাড়াই কাজ করবে।
+
+---
+
+12. OFFLINE TRAINING QUEUE
+
+Offline অবস্থায় events locally queue করতে হবে।
+
+Suggested:
+
+training_log.jsonl
+
+অথবা existing project-এর সবচেয়ে lightweight storage mechanism।
+
+প্রতিটি event durableভাবে save করতে হবে।
+
+Application crash হলেও queued data হারানো যাবে না।
+
+---
+
+13. ONLINE RETURN → TWO-WAY SYNC
+
+User দীর্ঘদিন offline থাকার পর online হলে:
+
+Phase A — Upload
+
+Local pending events:
+
+Local Queue
+↓
+Validate
+↓
+Deduplicate
+↓
+Batch Upload
+↓
+Supabase
+
+Phase B — Download
+
+তারপর Supabase থেকে missing global learning/model update fetch করতে হবে।
+
+Phase C — Merge
+
+Local knowledge এবং global knowledge safely combine করতে হবে।
+
+---
+
+14. GLOBAL MODEL STRATEGY
+
+Global model-এর source of truth হবে periodically generated Golden Model।
+
+Local user model কখনোই সরাসরি global model overwrite করতে পারবে না।
+
+Architecture:
+
+Community Events
+       ↓
+Supabase
+       ↓
+Validation
+       ↓
+Cleaning
+       ↓
+Golden Dataset
+       ↓
+Training
+       ↓
+Golden Model
+       ↓
+Version
+       ↓
+GitHub / Model Distribution
+       ↓
+Users
+
+---
+
+15. SMART MODEL UPDATE
+
+User 4 অনেকদিন offline থাকলে:
+
+পুরোনো local model সরাসরি delete করা যাবে না।
+
+Instead:
+
+Old Local Model
+       +
+New Global Model
+       +
+Pending Offline Events
+       ↓
+Validation
+       ↓
+Controlled Update
+       ↓
+New Local Model
+
+যদি direct model merge mathematically valid না হয়, তাহলে fake "weight merge" করা যাবে না।
+
+তার পরিবর্তে:
+
+1. latest Golden Model load
+2. compatible local replay data সংগ্রহ
+3. pending offline events validate
+4. controlled incremental update
+5. local model save
+
+---
+
+16. MODEL VERSIONING
+
+প্রতিটি model-এর version থাকতে হবে।
+
+Example:
+
+model_v001
+model_v002
+model_v003
+
+Metadata:
+
+{
+  "model_version": "...",
+  "dataset_version": "...",
+  "feature_version": "...",
+  "trained_at": "...",
+  "event_count": 0,
+  "training_commit": "..."
+}
+
+User local model-এর version track করবে।
+
+যদি remote version newer হয় → update process শুরু হবে।
+
+---
+
+17. GITHUB ACTIONS
+
+GitHub Actions দিয়ে automated global retraining system তৈরি করতে হবে।
+
+প্রতি 2–3 দিন পর workflow চালু হবে।
+
+Conceptual schedule:
+
+on:
+  schedule:
+    - cron: '0 0 */3 * *'
+
+Timezone এবং GitHub cron-এর UTC behavior মাথায় রাখতে হবে।
+
+Workflow:
+
+Scheduled Trigger
+      ↓
+Checkout Repository
+      ↓
+Install Minimal Dependencies
+      ↓
+Load Secure Supabase Credentials
+      ↓
+Fetch Community Data
+      ↓
+Validate
+      ↓
+Remove Noise
+      ↓
+Train Golden Model
+      ↓
+Evaluate
+      ↓
+Compare With Previous Model
+      ↓
+Accept Only If Valid
+      ↓
+Compress
+      ↓
+Version
+      ↓
+Commit
+      ↓
+Push
+
+---
+
+18. MODEL QUALITY GATE
+
+নতুন model কখনো blindly production-এ push করা যাবে না।
+
+Previous model বনাম candidate model evaluate করতে হবে।
+
+যদি candidate model:
+
+- performance significantly drops
+- validation fails
+- dataset corruption detected
+- model serialization fails
+- feature schema mismatch
+- abnormal model size
+- training failure
+
+তাহলে deployment বন্ধ করতে হবে।
+
+Previous Golden Model রাখতে হবে।
+
+---
+
+19. 100 MB HARD STORAGE SAFETY LIMIT
+
+Project-এর model/data footprint যেন uncontrolledভাবে বাড়তে না পারে।
+
+Target:
+
+WARNING: 80 MB
+CRITICAL: 90 MB
+HARD LIMIT: 100 MB
+
+এই threshold configurable constant হিসেবে রাখতে হবে।
+
+100 MB-এর কাছে গেলে cleanup process চালু হবে।
+
+---
+
+20. GARBAGE COLLECTION
+
+Cleanup blindly "সবচেয়ে পুরোনো data delete" করবে না।
+
+প্রথমে classify:
+
+- high quality
+- medium quality
+- low quality
+- duplicate
+- anomalous
+- obsolete
+- already incorporated
+
+Low-quality এবং duplicate data prune করা যাবে।
+
+High-value representative patterns retain করতে হবে।
+
+---
+
+21. IMPORTANT CORRECTION TO "TOP 20%"
+
+Blindly শুধু top 20% data রাখা যাবে না।
+
+কারণ এতে rare কিন্তু গুরুত্বপূর্ণ attack pattern হারিয়ে যেতে পারে।
+
+তাই retention হবে:
+
+High-confidence common patterns
++
+Rare valuable patterns
++
+Representative historical samples
++
+Recent validated events
+
+এরপর compression/pruning।
+
+---
+
+22. MODEL COMPRESSION
+
+Model architecture অনুযায়ী appropriate compression ব্যবহার করতে হবে।
+
+সম্ভাব্য:
+
+- joblib compression
+- quantization যেখানে safe
+- model pruning যেখানে algorithmically supported
+- unnecessary metadata removal
+
+কিন্তু model size 15–30 MB হবে—এমন কোনো guarantee hardcode করা যাবে না।
+
+Actual size measurement করতে হবে।
+
+---
+
+23. SAFE CLEANUP
+
+Database cleanup করার আগে:
+
+1. candidate Golden Model successfully train
+2. validate
+3. serialize
+4. load-test
+5. evaluate
+6. backup metadata
+7. only then prune obsolete data
+
+কোনো failed training-এর কারণে historical dataset হারানো যাবে না।
+
+---
+
+24. ATOMIC MODEL DEPLOYMENT
+
+Model update করার সময়:
+
+model.joblib
+
+সরাসরি overwrite করা যাবে না।
+
+Instead:
+
+model.joblib.tmp
+      ↓
+Validate load
+      ↓
+Rename atomically
+      ↓
+model.joblib
+
+এতে process মাঝপথে বন্ধ হলেও corrupted model পাওয়া যাবে না।
+
+---
+
+25. LOCAL BACKUP
+
+সবসময় অন্তত:
+
+current model
+previous known-good model
+
+এর ব্যবস্থা রাখতে হবে।
+
+যদি নতুন model load না হয়:
+
+Rollback → previous model
+
+---
+
+26. NETWORK RESILIENCE
+
+Supabase request-এর জন্য:
+
+- timeout
+- retry
+- exponential backoff
+- bounded retries
+
+ব্যবহার করতে হবে।
+
+Network error ≠ application failure।
+
+---
+
+27. IDEMPOTENT UPLOAD
+
+একই offline event বারবার upload হলেও duplicate record তৈরি করা যাবে না।
+
+Use:
+
+event_id UNIQUE
+
+এবং conflict-safe insertion/upsert strategy।
+
+---
+
+28. BATCHING
+
+প্রতিটি event আলাদাভাবে API request না পাঠিয়ে ছোট batch ব্যবহার করতে হবে।
+
+Example:
+
+10–50 events per request
+
+Project-এর actual payload size অনুযায়ী dynamically tune করতে হবে।
+
+---
+
+29. RATE LIMIT PROTECTION
+
+Free-tier infrastructure মাথায় রেখে:
+
+- unnecessary polling বন্ধ
+- exponential backoff
+- batch insert
+- delta fetch
+- local caching
+- sync cooldown
+
+ব্যবহার করতে হবে।
+
+প্রতিবার script run করলে পুরো database scan করা যাবে না।
+
+---
+
+30. GITHUB MODEL DISTRIBUTION
+
+Git repository-তে model রাখার আগে model size এবং repository constraints পরীক্ষা করতে হবে।
+
+যদি model binary GitHub-এর জন্য too large হয়ে যায়:
+
+- Git LFS
+- release artifact
+- external model storage
+
+এর মধ্যে project-এর zero/low-cost architecture-এর সঙ্গে সবচেয়ে practical option নির্বাচন করতে হবে।
+
+কিন্তু unnecessary infrastructure যোগ করা যাবে না।
+
+---
+
+31. ZERO-BUDGET / LIGHTWEIGHT REQUIREMENT
+
+প্রজেক্টটি যতটা সম্ভব free-tier এবং lightweight রাখতে হবে।
+
+Avoid:
+
+- unnecessary Docker
+- unnecessary Redis
+- Kafka
+- heavyweight databases
+- unnecessary background servers
+- expensive ML infrastructure
+- unnecessary cloud compute
+
+Primary stack:
+
+Python
+Scikit-learn
+Joblib
+Supabase
+GitHub Actions
+Local JSON/JSONL
+
+Existing repository architecture থাকলে সেটিকে priority দিতে হবে।
+
+---
+
+32. SECURITY
+
+বিশেষভাবে নিশ্চিত করতে হবে:
+
+NEVER commit:
+
+- GitHub PAT
+- Supabase service_role
+- private API keys
+- secret tokens
+- passwords
+
+GitHub Actions:
+
+Secrets ব্যবহার করতে হবে।
+
+Conceptual:
+
+SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
+GITHUB_TOKEN
+
+Project-specific naming existing configuration অনুযায়ী preserve করতে হবে।
+
+"service_role" কখনো public client code-এ যাবে না।
+
+---
+
+33. SUPABASE RLS
+
+যেখানে client-side access থাকবে সেখানে RLS carefully configure করতে হবে।
+
+"service_role" privileged server-side workflow-এর জন্য থাকবে।
+
+Public/anon key দিয়ে privileged operations করা যাবে না।
+
+---
+
+34. OBSERVABILITY
+
+Logs informative কিন্তু secret-safe হতে হবে।
+
+Log করা যেতে পারে:
+
+[SYNC] 17 new events found
+[SYNC] 17 validated
+[SYNC] 15 uploaded
+[MODEL] version v12 detected
+[MODEL] local update completed
+
+কিন্তু কখনো:
+
+API KEY = ...
+SERVICE ROLE = ...
+GITHUB PAT = ...
+
+print করা যাবে না।
+
+---
+
+35. FILE STRUCTURE
+
+Existing project structure analyse করে minimal modifications করতে হবে।
+
+প্রয়োজনে conceptual structure:
+
+.
+├── models/
+│   ├── ai_agent.joblib
+│   ├── previous_model.joblib
+│   └── model_metadata.json
+│
+├── learning/
+│   ├── sync.py
+│   ├── validator.py
+│   ├── trainer.py
+│   ├── versioning.py
+│   └── cleanup.py
+│
+├── data/
+│   └── training_log.jsonl
+│
+├── .github/
+│   └── workflows/
+│       └── nightly-model-build.yml
+│
+├── requirements.txt
+└── .gitignore
+
+তবে existing repository structure unnecessarily rewrite করা যাবে না।
+
+---
+
+36. DEPENDENCY MINIMIZATION
+
+যে package প্রয়োজন নেই তা add করা যাবে না।
+
+Existing dependencies প্রথমে audit করো।
+
+Duplicate library থাকলে consolidate করো।
+
+ML functionality ভাঙা যাবে না।
+
+---
+
+37. IMPLEMENTATION WORKFLOW
+
+প্রথমে repository audit করো:
+
+1. existing ML model
+2. training code
+3. inference code
+4. existing "ai_agent.joblib"
+5. feature extraction
+6. training labels
+7. existing data files
+8. requirements
+9. current GitHub Actions
+10. existing Supabase integration
+
+এরপর architecture-এর সঙ্গে existing code map করো।
+
+---
+
+38. DO NOT REWRITE EVERYTHING
+
+Existing working code থাকলে:
+
+modify minimally.
+
+Existing functionality preserve করতে হবে।
+
+Refactor only যেখানে প্রয়োজন।
+
+---
+
+39. TESTING
+
+কমপক্ষে এই test cases implement করতে হবে:
+
+Test 1
+
+Internet available → sync succeeds.
+
+Test 2
+
+Internet unavailable → local model works.
+
+Test 3
+
+Supabase unavailable → application continues.
+
+Test 4
+
+Offline events accumulate → reconnect হলে upload হয়.
+
+Test 5
+
+Duplicate event → duplicate database row তৈরি হয় না.
+
+Test 6
+
+Invalid event → rejected.
+
+Test 7
+
+New remote events → delta pulling only.
+
+Test 8
+
+Remote model newer → local update.
+
+Test 9
+
+Local model corrupted → previous model fallback.
+
+Test 10
+
+Candidate global model worse → deployment rejected.
+
+Test 11
+
+Storage approaches 80 MB → cleanup warning/process.
+
+Test 12
+
+Storage reaches critical threshold → garbage collection.
+
+Test 13
+
+GitHub Action → complete retraining pipeline.
+
+Test 14
+
+Secrets → source code/logs-এ leak হয় না.
+
+---
+
+40. SUCCESS CRITERIA
+
+Implementation complete ধরা হবে শুধুমাত্র যখন:
+
+- local model offline কাজ করে
+- Supabase sync optional dependency হিসেবে কাজ করে
+- delta sync হয়
+- duplicate protection থাকে
+- offline queue কাজ করে
+- reconnect sync কাজ করে
+- global model versioning কাজ করে
+- 2–3 day GitHub retraining automation কাজ করে
+- model quality gate থাকে
+- rollback থাকে
+- cleanup থাকে
+- 100 MB safety boundary থাকে
+- credentials secureভাবে injected হয়
+- existing application functionality intact থাকে
+
+---
+
+41. FINAL ENGINEERING PRINCIPLE
+
+এই architecture-কে "full federated learning" নামে incorrectly implement করা যাবে না।
+
+বর্তমান architecture মূলত:
+
+Community Event Sharing + Incremental Local Learning + Periodic Centralized Golden Model Retraining
+
+এটি lightweight এবং zero/low-cost environment-এর জন্য intentional design।
+
+প্রথম priority:
+
+Reliability
+>
+Data Integrity
+>
+Security
+>
+Model Stability
+>
+Low Bandwidth
+>
+Low Storage
+>
+Performance
+
+---
+
+42. EXECUTION INSTRUCTION
+
+এখন repository-এর actual code inspect করো।
+
+প্রথমে architecture বুঝে নাও।
+
+তারপর:
+
+1. প্রয়োজনীয় files identify করো
+2. existing implementation-এর সঙ্গে নতুন learning-sync architecture integrate করো
+3. Supabase schema/migrations তৈরি করো
+4. local offline queue তৈরি করো
+5. delta sync implement করো
+6. validation implement করো
+7. incremental learning implement করো
+8. model versioning implement করো
+9. GitHub Actions workflow implement করো
+10. Golden Model training implement করো
+11. cleanup/GC implement করো
+12. rollback implement করো
+13. tests চালাও
+14. security audit চালাও
+15. final implementation verify করো
+
+কোনো requirement silently বাদ দেবে না।
+
+কোনো supplied configuration/credential নিজে থেকে remove করবে না; তবে privileged secrets source code-এ hardcode না করে secure environment/secret mechanism-এ ব্যবহার করবে।
+
+কোনো জায়গায় existing code-এর সঙ্গে conflict হলে existing functionality ভেঙে না দিয়ে compatible implementation তৈরি করবে।
+
+DO NOT merely explain what should be done. Inspect the repository and implement the complete working solution.
+
+
+GitHub 
+
+<GITHUB_PAT_REDACTED>
+
+https://github.com/OPX-Aminul/OPXoneshot
+
+Supabase
+
+
+anon
+public
+
+
+<SUPABASE_ANON_KEY_REDACTED>
+
+service_role
+
+<SUPABASE_SERVICE_ROLE_KEY_REDACTED>
+
+
+
+https://oenckshhftqjjwhngxzo.supabase.co
+
+
+
+লাইটওয়েট লার্নিং সিঙ্ক (Supabase integration)
+সরাসরি মডেল সিঙ্ক নয়, ডেটা সিঙ্ক: ইউজার ২ যখন কাজ করবে, তখন তার ডিভাইস থেকে পুরো মডেল আপলোড হবে না। শুধুমাত্র অ্যাটাক মেট্রিক্স এবং নতুন স্টেট (যেমন: ১৩টি ফিচার এবং তার ফলাফল: Success/Fail) Supabase-এর একটি ডেটাবেজ টেবিলে ছোট একটি JSON অবজেক্ট আকারে অটো-ইনসার্ট হবে।
+ডেল্টা পুলিং (Delta Pulling): ইউজার ১ যখনই স্কিপ্ট রান করবে, স্কিপ্টটি Supabase API ডেকে শুধু সর্বশেষ last_synced_timestamp-এর পর থেকে আসা নতুন ১০/২০টি ইভেন্ট ফেচ (Fetch) করে নেবে (যার সাইজ হবে ২-৫ KB)।
+ইন-মেমোরি আংশিক প্রশিক্ষণ (partial_fit): Scikit-learn-এর SGDClassifier বা Q-Learning-এ partial_fit() মেথড থাকে। এই নতুন ২-৫ KB ডাটা পেয়ে ১ সেকেন্ডের মধ্যে লোকাল মডেলটি টিউন হয়ে যাবে।
+
+
+অটোমেটেড গিটহাব নাইটলি বিল্ড (GitHub Actions)
+ইউজার ৩ যেন নতুন গিটহাব ক্লোন করার সময়েই সবচেয়ে আপডেটেড মডেলটি পায়, তার জন্য গিটহাবে একটি GitHub Action Workflow রান করানো যায়।
+প্রতি ২৪ ঘণ্টায় একবার গিটহাব অ্যাকশন স্বয়ংক্রিয়ভাবে Supabase থেকে সমস্ত কমিউনিটি ডাটা টেনে নিয়ে গিটহাব প্রজেক্টে থাকা models/ai_agent.joblib ফাইলটি নতুন করে ট্রেইন করে আপডেট করে দেবে (git commit & push)।
+ফলে নতুন ইউজার ক্লোন করার সাথে সাথেই একদম লেটেস্ট 'গ্লোবাল ব্রেইন' পেয়ে যাবে।
+৪. লোকাল ব্যাকআপ এবং অফলাইন মোড (Resilience)
+যদি ইউজারের ডিভাইসে কোনো কারণে ইন্টারনেট না থাকে বা Supabase ডাউন থাকে, তাহলে স্কিপ্টটি ক্র্যাশ না করে লোকাল .joblib দিয়ে কাজ চালিয়ে যাবে এবং ইন্টারনেট পাওয়া মাত্র ব্যাকগ্রাউন্ডে ডেটা সিঙ্ক করে নেবে।
+
+
+
+
+আপনার উদ্ভাবনী চিন্তা ও আর্কিটেকচারাল আইডিয়াটি নীতিগতভাবে অত্যন্ত চমৎকার। তবে বাস্তবে একে ১০০% **কোনো লিমিটেশন ছাড়া** রূপান্তর করতে গেলে কয়েকটি প্রযুক্তিগত এবং বাস্তব চ্যালেঞ্জের মুখোমুখি হতে হবে।
+প্রকৌশল (Software Engineering) ও মেশিন লার্নিংয়ের দৃষ্টিকোণ থেকে প্রধান লিমিটেশন বা চ্যালেঞ্জগুলো নিচে তুলে ধরা হলো:
+### ১. ডেটা কোয়ালিটি এবং পলিউশন (Data Noise & Poisoning)
+ * **চ্যালেঞ্জ:** সব ইউজারের নেটওয়ার্ক এনভায়রনমেন্ট এক নয়। ইউজার ২ যদি দুর্বল সিগন্যাল বা ভুল কনফিগারেশনের কারণে অনেকগুলো ব্যর্থ অ্যাটেম্পট করে, তবে সেই ভুল বা নোংরা ডেটা (Noisy Data) ক্লাউডে জমা হবে।
+ * **ফলাফল:** ইউজার ১ সেই খারাপ ডেটা দিয়ে সিঙ্ক করলে তার মডেলের দক্ষতা বেড়ে যাওয়ার বদলে কমে যেতে পারে (Overfitting বা Model Poisoning)।
+### ২. অনলাইন লার্নিংয়ের গাণিতিক সীমাবদ্ধতা (Partial Fit Drift)
+ * **চ্যালেঞ্জ:** Scikit-learn-এর partial_fit() বা Q-Learning-এ নতুন ডেটা লাইভ ফিড করলে **"Catastrophic Forgetting"** হতে পারে। অর্থাৎ, মডেল নতুন প্যাটার্ন শিখতে গিয়ে পুরোনো দরকারি প্যাটার্নগুলো ভুলে যেতে শুরু করে।
+ * **সমাধান:** পুরো মডেল রি-ট্রেইন না করে শুধু ডেটা সিঙ্ক করলে একসময় মডেলের এক্যুরেসি ড্রপ করতে পারে।
+### ৩. নেটওয়ার্ক ও ফ্রি-টায়ার লিমিট (Rate Limits)
+ * **চ্যালেঞ্জ:** Supabase-এর ফ্রি টায়ারেAPI রিকোয়েস্ট এবং ডেটাবেজ সাইজের একটি নির্দিষ্ট সীমাবদ্ধতা থাকে। যদি হাজার হাজার ইউজার একই সাথে ডেটা ইনসার্ট ও পুল করতে থাকে, তবে ক্যোয়ারী লিমিট শেষ হয়ে যেতে পারে।
+### ৪. গিটহাব অ্যাকশনস সীমাবদ্ধতা (Execution Limits)
+ * **চ্যালেঞ্জ:** গিটহাব অ্যাকশন প্রতি ২৪ ঘণ্টায় মডেল রি-ট্রেইন করার সময় যদি ডেটাবেজ অনেক বড় হয়ে যায়, তবে গিটহাব অ্যাকশনের ফ্রি এক্সিকিউশন টাইম (Minutes Limit) এবং গিট ফ্রেমে বড় বাইনারি ফাইল নিয়মিত পুশ করার ক্ষেত্রে git lfs বা ফাইল সাইজ লিমিটের ঝামেলা হতে পারে।
+### বাস্তবায়নের সেরা কৌশল (Best Practice)
+এই লিমিটেশনগুলো কাটিয়ে বাস্তব রূপ দিতে নিচের কৌশলগুলো অবলম্বন করা যায়:
+ * **Validation Rules:** Supabase-এ ডেটা পাঠানোর আগে ইউজারের লোকাল স্কিপ্টেই একটি নির্দিষ্ট থ্রেশহোল্ড (যেমন: Signal Strength > -70 dBm) চেক করে শুধু ভ্যালিড ডেটা পাঠানো।
+ * **Batch Update:** প্রতি সেকেন্ডে লাইভ সিঙ্ক না করে প্রতি ৫ বা ১০টি সেশন পর পর ছোট ব্যাচে সিঙ্ক করা।
+ * **Central Retraining:** ইউজারের ডিভাইসে সরাসরি মডেল ওভাররাইট না করে প্রতি সপ্তাহে গিটহাব অ্যাকশনে ভালো ডেটা ফিল্টার করে একটি "Clean Golden Model" তৈরি করা।
+সংক্ষেপে, এটি বাস্তবে ১০০% রূপান্তর করা **সম্পূর্ণ সম্ভব**, তবে একটি সুনির্দিষ্ট **Data Pipeline and Validation Logic** যুক্ত করে লিমিটেশনগুলোকে নিয়ন্ত্রণ করতে হবে।
+
+
+
+
+GitHub 
+
+<GITHUB_PAT_REDACTED>
+
+https://github.com/OPX-Aminul/OPXoneshot
+
+Supabase
+
+
+anon
+public
+
+
+<SUPABASE_ANON_KEY_REDACTED>
+
+service_role
+
+<SUPABASE_SERVICE_ROLE_KEY_REDACTED>
+
+
+
+https://oenckshhftqjjwhngxzo.supabase.co
+
+
+
+
+হ্যাঁ, **প্রতি ২-৩ দিন পর পর** মডেল টিউন বা রি-ট্রেন করা একটি অত্যন্ত বাস্তবসম্মত সিদ্ধান্ত! এটি সাপ্তাহিক আপডেটের চেয়ে বেশি কার্যকরী হওয়ার প্রধান কারণগুলো নিচে দেওয়া হলো:
+ * **তাজা ডেটার সুবিধা (Fresh Data):** কমিউনিটির নতুন অ্যাক্টিভিটিগুলো দ্রুত গ্লোবাল মডেলে যুক্ত হয়, ফলে নতুন ইউজাররা দ্রুত পারফর্ম্যান্স বুস্ট পায়।
+ * **কম রিসোর্স খরচ:** সপ্তাহে মাত্র ২-৩ বার GitHub Actions চলায় ফ্রি এক্সিকিউশন লিমিট শেষ হওয়ার কোনো ঝুঁকি থাকে না।
+ * **মডেলের স্থায়ীত্ব (Stability):** ঘন ঘন (যেমন প্রতিদিন) আপডেট দিলে ক্যাটাস্ট্রফিক ফরগেটিং (Catastrophic Forgetting) হতে পারে, আবার অনেক দিন পর করলে পুরনো ডেটার জট তৈরি হয়। ২-৩ দিনের সময়সীমা এই দুটির মাঝামাঝি একটি আদর্শ ভারসাম্য (Ideal Balance)।
+### গিটহাব অ্যাকশনে ২-৩ দিন পর পর সিঙ্ক করার নিয়ম
+গিটহাব ওয়ার্কফ্লো ফাইলে (YAML) cron শিডিউল সেট করে আপনি খুব সহজেই এটি বাস্তবায়ন করতে পারেন:
+```yaml
+on:
+  schedule:
+    # প্রতি ৩ দিন পর পর রাত ১২টায় অটোমেটিক রান হবে
+    - cron: '0 0 */3 * *'
+
+```
+আপনার এই আর্কিটেকচারাল ডিজাইনটি MLOps (Machine Learning Operations)-এর স্ট্যান্ডার্ড ফলো করছে। এবার কোডিং শুরু করে দিতে পারেন, কোনো টেকনিক্যাল আটকে গেলে বলবেন!
+
+
+
+ইউজার ৪ যখন অনেকদিন পর অনলাইনে আসবে, তখন তার সিস্টেম ও ক্লাউডের মধ্যে **দ্বিমুখী সিঙ্ক্রোনাইজেশন (Two-Way Sync)** ঘটবে। এটি কীভাবে কাজ করবে এবং কী ঘটবে তা নিচে দেওয়া হলো:
+ * **১. ইউজার ৪-এর অফলাইন ডেটা ক্লাউডে যাবে (Data Upload):**
+   ইউজার ৪ অফলাইনে থাকা অবস্থায় যে নতুন অ্যাটাক বা অভিজ্ঞতা অর্জন করেছে (যেগুলো তার স্থানীয় training_log.json ফাইলে জমা ছিল), অনলাইনে আসার সাথে সাথেই সেই লোকাল ডেটাগুলো Supabase-এ আপলোড হয়ে যাবে। ফলে ইউজার ১ ও ২ সহ পুরো কমিউনিটি ইউজার ৪-এর অভিজ্ঞতা থেকে উপকৃত হবে।
+ * **২. গ্লোবাল মডেল দিয়ে লোকাল মডেল আপডেট হবে (Model Download):**
+   যেহেতু ইউজার ৪ অনেকদিন অনলাইনে ছিল না, তাই ক্লাউডের **গ্লোবাল এআই ব্রেইন** (যা ইউজার ১ ও ২-এর ডেটা দিয়ে ইতোমধ্যে অনেক উন্নত হয়েছে) ইউজার ৪-এর পুরোনো মডেলের চেয়ে অনেক বেশি বুদ্ধিমান। তাই ইউজার ৪ গিটহাব বা Supabase থেকে লেটেস্ট মডেল ট্রেইনিং ডেল্টা ডাউনলোড করে নিজের লোকাল এআই ব্রেইনকে এক সেকেন্ডে আপডেট করে নেবে।
+### ক্যাটাস্ট্রফিক ফরগেটিং প্রতিরোধ (Catastrophic Forgetting)
+অনেকদিন পর ইউজার ৪ অনলাইনে আসলে যেন তার পুরোনো মডেল গ্লোবাল মডেলের সাথে কনফ্লিক্ট (Conflict) না করে, সেটির সমাধান:
+ * **সরাসরি ফাইল ওভাররাইট না করা:** ইউজার ৪-এর পুরনো .joblib বা .pkl মডেল ফাইলকে সরাসরি ফেলে দেওয়া হবে না।
+ * **স্মার্ট মার্জ (Smart Merge):** স্কিপ্টটি প্রথমে ক্লাউড থেকে আপডেট হওয়া গ্লোবাল মডেলের ওয়েট (Weights) নামিয়ে নেবে। এরপর ইউজার ৪-এর জমে থাকা অফলাইন ডেটাগুলোর ওপর partial_fit() চালিয়ে লোকাল মডেলটিকে নিমিষেই গ্লোবাল স্তরে নিয়ে আসবে।
+সহজ কথায়, ইউজার ৪ অনলাইনে আসার সাথে সাথেই সে গ্লোবাল কমিউনিটির সমস্ত জ্ঞান পেয়ে যাবে এবং একই সাথে তার নিজের অর্জিত অফলাইন জ্ঞানও গ্লোবাল সার্ভারে যোগ করে দেবে।
+
+
+
+আপনার চাহিদাটি একদম পরিষ্কার! এটি মেশিন লার্নিং-এর **Model Pruning and Data Garbage Collection** ধারণার সাথে পুরোপুরি মিলে যায়।
+মডেল এবং ডেটার আকার যেন কখনোই **১০০ MB** অতিক্রম না করে, সেজন্য গিটহাব অ্যাকশনস এবং সুপাবেস (Supabase)-এ নিচে উল্লেখিত প্রক্রিয়াটি যুক্ত করতে হবে:
+### ১০০ MB থ্রেশহোল্ড এবং অটো-ক্লিনআপ প্রসেস
+```
+[ Supabase Data > 80 MB ]
+           │
+           ▼ (Trigger Garbage Collector)
+┌─────────────────────────────────────────┐
+│ 1. Filter Out Noise & Bad Data          │
+│ 2. Keep Top 20% High-Confidence Data    │
+│ 3. Compress & Re-train Golden Model     │
+└─────────────────────────────────────────┘
+           │
+           ▼ (Output Clean Model ~ 15-30 MB)
+[ Push Clean Model to GitHub & Supabase ]
+
+```
+### এটি যেভাবে কাজ করবে:
+**১. থ্রেশহোল্ড মনিটরিং (Threshold Monitor):**
+ * প্রতি ২-৩ দিন পর পর যখন গিটহাব অ্যাকশন রান করবে, তখন সেটি প্রথমে ফাইলগুলোর মোট সাইজ (সুপাবেসের ডেটাবেজ রেকর্ড + মডেল ফাইলের আকার) হিসাব করবে।
+ * যদি আকার ৮০-৯০ MB স্পর্শ করে, তবে সাথে সাথে **"Compression & Purge Mode"** সক্রিয় হবে।
+**২. ডেটা ফিল্টারিং ও নয়েজ রিমুভাল (Noise Cleanup):**
+ * সব ডেটা সমান গুরুত্বপূর্ণ নয়। যে ডেটাগুলোতে ভুল ইনপুট বা অযথা লুপে আটকে থাকার রেকর্ড রয়েছে (Low Confidence Records), সেগুলোকে ডেটাবেজ থেকে মুছে ফেলা (Prune) হবে।
+ * শুধু সেরা ২০%-৩০% হাই-কোয়ালিটি ইউনিক প্যাটার্ন এবং সফল রেজাল্টগুলো রেখে বাকি নয়েজ ডেটা ড্রপ করা হবে।
+**৩. মডেল প্রুনিং এবং কম্প্রেশন (Model Pruning & Compression):**
+ * Scikit-learn বা Reinforcement Learning ট্রি-এর যে শাখাগুলো (Branches) সিদ্ধান্ত নেওয়ার ক্ষেত্রে খুব কম অবদান রাখে, সেগুলোকে ছেঁটে ফেলা (Pruning) হবে।
+ * প্রশিক্ষণ শেষে মডেলের বাইনারি ফাইলকে joblib বা gzip দিয়ে হাই-কম্প্রেশন লেভেলে সেভ করা হবে, যা মেমোরি সাইজকে সরাসরি **১০ MB থেকে ৩০ MB-এর মধ্যে নিয়ে আসবে।**
+**৪. গ্লোবাল সিঙ্ক অ্যান্ড রিসেট (Global Push):**
+ * ক্লিন হওয়া এই হালকা "Golden Model" গিটহাবে পুশ হয়ে যাবে এবং সুপাবেসের পুরানো ভারী টেবিল ট্রাঙ্কেট (Clear) হয়ে নতুন ভার্সন ট্যাগ বসবে।
+ * এর ফলে ইউজার ১, ২, ৩ বা ৪ যে-ই এর পর স্কিপ্ট রান করুক না কেন, তারা নিমিষেই মাত্র ২০-৩০ MB-এর সম্পূর্ণ পরিষ্কার, দ্রুত এবং নির্ভুল ব্রেইন ডাউনলোড করে নেবে।
+এই মেকানিজমটি নিশ্চিত করবে যে বছরের পর বছর শত শত ইউজার ব্যবহার করলেও আপনার প্রজেক্টের সাইজ কখনোই ১০০ MB-র গণ্ডি পার হবে না!
+
+মনে রাখবে সবকিছু হার্ট করেট করবে সব ট্রেডেন্সিয়াল হার্ডকরেট করবে এটা মাস্ট করবেই করবে হার্ট করে 

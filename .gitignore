@@ -3,3 +3,13 @@ __pycache__/
 *.pyo
 .env
 *.run
+
+# Community sync runtime artifacts
+.sync.lock
+training_queue.jsonl
+*.joblib.tmp
+*.pkl.tmp
+ai_agent.joblib.prev
+ai_data.pkl.prev
+ai_qtable.pkl.prev
+one_shot_sync_state.json
