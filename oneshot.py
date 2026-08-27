@@ -3074,57 +3074,115 @@ def setupMediatekWifi(wmt_wifi_device: Path):
 
 
 # ---------------------------------------------------------------------------
-# AI Agent — lightweight ML decision engine (scikit-learn or rule-based fallback)
+# Auto-dependency installer — ensures Python ML packages at startup
+# ---------------------------------------------------------------------------
+
+def _ensure_ml_deps():
+    """Inspect and auto-install missing Python ML packages (scikit-learn, numpy, joblib).
+
+    Runs silently at startup. If installation fails (no internet, restricted env),
+    the script continues — AIAgent degrades to rule-based heuristic.
+    """
+
+    required = [
+        ('sklearn', 'scikit-learn'),
+        ('numpy',   'numpy'),
+        ('joblib',  'joblib'),
+    ]
+
+    missing = []
+    for mod, pkg in required:
+        try:
+            __import__(mod)
+        except ImportError:
+            missing.append(pkg)
+
+    if not missing:
+        return
+
+    logger.info(f'[AI] Missing Python packages: {", ".join(missing)} — installing...')
+
+    import subprocess
+    try:
+        result = subprocess.run(
+            [sys.executable, '-m', 'pip', 'install', '--break-system-packages', '-q'] + missing,
+            capture_output=True, timeout=120,
+        )
+        if result.returncode == 0:
+            logger.success(f'[AI] Installed: {", ".join(missing)}')
+        else:
+            logger.warning(f'[AI] pip install failed (rc={result.returncode}) — using rule-based fallback')
+    except Exception as exc:
+        logger.warning(f'[AI] pip install failed ({exc}) — using rule-based fallback')
+
+
+# ---------------------------------------------------------------------------
+# AI Agent — hybrid RF + Q-Learning + SGD ensemble
 # ---------------------------------------------------------------------------
 
 class AIAgent:
-    """Lightweight ML agent for WPS attack optimization.
+    """Advanced ML agent for WPS attack optimization.
 
-    Uses a small Random Forest (when scikit-learn is installed) to predict the
-    best action at each phase of the auto-attack chain.  When ML libraries are
-    absent the agent falls back to pure rule-based heuristics — no functionality
-    is lost.
+    Hybrid ensemble of three learners:
 
-    On first run the agent generates synthetic training data from domain rules
-    so the model is immediately useful.  Each subsequent attack adds real
-    observations; the model retrains periodically and improves over time.
+    1. **Random Forest** (batch) — trained on accumulated observations every N
+       steps.  Provides a stable, high-quality vote.
+    2. **SGD Classifier** (online) — updated via ``partial_fit`` after *every*
+       single observation so the agent adapts in real-time.
+    3. **Q-Learning table** (reinforcement) — a tabular RL component that
+       accumulates reward signals across discretized state-action pairs.
 
-    Model + data are stored under ``~/.OneShot-Extended/ai_agent.joblib`` and
-    ``ai_data.pkl``.  Total size stays well under 50 MB.
+    The three votes are combined with weights (RF 0.4, SGD 0.3, Q 0.3).  When
+    ML libraries are unavailable the agent silently falls back to pure
+    rule-based heuristics — zero functionality is lost.
+
+    Persistence: model weights + Q-table + observation buffer are saved to
+    ``~/.OneShot-Extended/`` via joblib / pickle.  Total size stays well under
+    50 MB.
     """
 
-    _DIR   = os.path.join(os.path.expanduser('~'), '.OneShot-Extended')
-    _MODEL = os.path.join(_DIR, 'ai_agent.joblib')
-    _DATA  = os.path.join(_DIR, 'ai_data.pkl')
+    _DIR    = os.path.join(os.path.expanduser('~'), '.OneShot-Extended')
+    _MODEL  = os.path.join(_DIR, 'ai_agent.joblib')
+    _DATA   = os.path.join(_DIR, 'ai_data.pkl')
+    _QTAB   = os.path.join(_DIR, 'ai_qtable.pkl')
 
     _FEATS = [
         'signal', 'wps_ver', 'wps_locked', 'is_vuln',
         'attempt', 'timeouts', 'resp_delay', 'm_msgs',
-        'fails', 'sig_ok', 'oui',
+        'fails', 'sig_ok', 'oui', 'frame_loss', 'hist_locks',
     ]
 
     ACTIONS = ('proceed', 'wait', 'skip', 'abort')
+
+    # Q-Learning hyper-parameters
+    _Q_ALPHA = 0.1    # learning rate
+    _Q_GAMMA = 0.9    # discount factor
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
     def __init__(self):
-        self.has_ml = False
-        self.model  = None
-        self.X: list[list[float]] = []
-        self.y: list[str]          = []
+        self.has_ml    = False
+        self.rf_model  = None          # RandomForestClassifier (batch)
+        self.sgd_model = None          # SGDClassifier (online partial_fit)
+        self.q_table:  dict[str, dict[str, float]] = {}
+
+        self.X:             list[list[float]] = []
+        self.y:             list[str]          = []
+        self.reward_history: list[float]       = []
 
         try:
-            import sklearn.ensemble   # noqa: F401
-            import joblib             # noqa: F401
+            import sklearn.ensemble       # noqa: F401
+            import sklearn.linear_model   # noqa: F401
+            import numpy                  # noqa: F401
+            import joblib                 # noqa: F401
             self.has_ml = True
         except ImportError:
             pass
 
         self._load()
 
-        # Cold start — no saved data yet → generate synthetic dataset
         if len(self.X) < 5:
             self._pretrain()
 
@@ -3140,41 +3198,66 @@ class AIAgent:
                 import pickle
                 with open(self._DATA, 'rb') as fh:
                     d = pickle.load(fh)
-                self.X = d.get('X', [])
-                self.y = d.get('y', [])
+                self.X             = d.get('X', [])
+                self.y             = d.get('y', [])
+                self.reward_history = d.get('rewards', [])
             except Exception:
                 pass
 
         if self.has_ml and os.path.exists(self._MODEL):
             try:
                 import joblib
-                self.model = joblib.load(self._MODEL)
+                blob = joblib.load(self._MODEL)
+                self.rf_model  = blob.get('rf')
+                self.sgd_model = blob.get('sgd')
             except Exception:
-                self.model = None
+                pass
 
-        if self.has_ml and self.model is None and len(self.X) >= 20:
-            self._train()
+        if os.path.exists(self._QTAB):
+            try:
+                import pickle
+                with open(self._QTAB, 'rb') as fh:
+                    self.q_table = pickle.load(fh)
+            except Exception:
+                pass
+
+        if self.has_ml and self.rf_model is None and len(self.X) >= 20:
+            self._train_rf()
+        if self.has_ml and self.sgd_model is None and len(self.X) >= 10:
+            self._init_sgd()
 
     def _save(self):
         try:
             os.makedirs(self._DIR, exist_ok=True)
+
             import pickle
             with open(self._DATA, 'wb') as fh:
-                pickle.dump({'X': self.X[-500:], 'y': self.y[-500:]}, fh)
+                pickle.dump({
+                    'X':       self.X[-500:],
+                    'y':       self.y[-500:],
+                    'rewards': self.reward_history[-500:],
+                }, fh)
+
+            if self.has_ml:
+                import joblib
+                joblib.dump({'rf': self.rf_model, 'sgd': self.sgd_model}, self._MODEL)
+
+            with open(self._QTAB, 'wb') as fh:
+                pickle.dump(self.q_table, fh)
         except Exception:
             pass
 
     def finalize(self):
-        """Save model + data — call once at the end of the attack chain."""
+        """Save everything on exit."""
         if self.has_ml and len(self.X) >= 10:
-            self._train()
+            self._train_rf()
         self._save()
 
     # ------------------------------------------------------------------
-    # Training
+    # Training — RF (batch), SGD (online), Q-table (RL)
     # ------------------------------------------------------------------
 
-    def _train(self):
+    def _train_rf(self):
         if not self.has_ml or len(self.X) < 10:
             return
         import numpy as np
@@ -3188,20 +3271,49 @@ class AIAgent:
                 X = np.vstack([X, np.zeros((1, len(self._FEATS)))])
                 y = np.append(y, cls)
 
-        self.model = RandomForestClassifier(
-            n_estimators=5, max_depth=4, random_state=42,
+        self.rf_model = RandomForestClassifier(
+            n_estimators=20, max_depth=6, random_state=42,
         )
-        self.model.fit(X, y)
+        self.rf_model.fit(X, y)
 
-        try:
-            import joblib
-            os.makedirs(self._DIR, exist_ok=True)
-            joblib.dump(self.model, self._MODEL)
-        except Exception:
-            pass
+    def _init_sgd(self):
+        if not self.has_ml or len(self.X) < 5:
+            return
+        import numpy as np
+        from sklearn.linear_model import SGDClassifier
+
+        X = np.array(self.X[-200:])
+        y = np.array(self.y[-200:])
+
+        classes = list(self.ACTIONS)
+        for cls in np.unique(y):
+            if cls not in classes:
+                classes.append(cls)
+
+        self.sgd_model = SGDClassifier(loss='log_loss', random_state=42)
+        self.sgd_model.fit(X, y)
+
+    def _online_fit(self, feat: list[float], label: str):
+        """SGD partial_fit — one observation at a time."""
+        if not self.has_ml:
+            return
+        import numpy as np
+
+        X = np.array([feat])
+        y = np.array([label])
+
+        if self.sgd_model is None:
+            from sklearn.linear_model import SGDClassifier
+            self.sgd_model = SGDClassifier(loss='log_loss', random_state=42)
+            self.sgd_model.fit(X, y)
+        else:
+            try:
+                self.sgd_model.partial_fit(X, y)
+            except Exception:
+                self.sgd_model.fit(X, y)
 
     def _pretrain(self):
-        """Generate ~200 synthetic training samples from domain knowledge."""
+        """Generate ~200 synthetic samples from domain knowledge for cold start."""
         import random
         random.seed(42)
 
@@ -3210,20 +3322,20 @@ class AIAgent:
             'wps_version': '2.0', 'wps_locked': False,
             'is_vulnerable': False, 'attempt': 1,
             'timeouts': 0, 'resp_delay': 2.0,
-            'm_msgs': 3, 'fails': 0,
+            'm_msgs': 3, 'fails': 0, 'hist_locks': 0,
         }
 
         rules = [
-            ({'signal': -45, 'm_msgs': 4, 'fails': 0},           'proceed', 30),
-            ({'signal': -55, 'is_vulnerable': True, 'm_msgs': 3}, 'proceed', 25),
-            ({'wps_locked': True, 'fails': 0},                     'wait',    20),
-            ({'signal': -80, 'timeouts': 5, 'm_msgs': 0, 'fails': 5}, 'abort', 25),
-            ({'signal': -60, 'timeouts': 1, 'm_msgs': 2},         'proceed', 15),
-            ({'signal': -80, 'timeouts': 3, 'm_msgs': 0, 'fails': 3}, 'skip', 20),
-            ({'signal': -60, 'm_msgs': 0, 'fails': 0},            'proceed', 25),
-            ({'signal': -65, 'timeouts': 2, 'm_msgs': 0, 'fails': 4}, 'abort', 20),
-            ({'signal': -50, 'wps_locked': True, 'is_vulnerable': True}, 'wait', 15),
-            ({'signal': -70, 'attempt': 1, 'm_msgs': 0, 'fails': 0}, 'proceed', 10),
+            ({'signal': -45, 'm_msgs': 4, 'fails': 0},                              'proceed', 30),
+            ({'signal': -55, 'is_vulnerable': True, 'm_msgs': 3},                    'proceed', 25),
+            ({'wps_locked': True, 'fails': 0},                                        'wait',    20),
+            ({'signal': -80, 'timeouts': 5, 'm_msgs': 0, 'fails': 5},               'abort',   25),
+            ({'signal': -60, 'timeouts': 1, 'm_msgs': 2},                            'proceed', 15),
+            ({'signal': -80, 'timeouts': 3, 'm_msgs': 0, 'fails': 3},               'skip',    20),
+            ({'signal': -60, 'm_msgs': 0, 'fails': 0},                               'proceed', 25),
+            ({'signal': -65, 'timeouts': 2, 'm_msgs': 0, 'fails': 4},               'abort',   20),
+            ({'signal': -50, 'wps_locked': True, 'is_vulnerable': True},              'wait',    15),
+            ({'signal': -70, 'attempt': 1, 'm_msgs': 0, 'fails': 0, 'hist_locks': 2},'proceed', 10),
         ]
 
         for overrides, label, count in rules:
@@ -3232,13 +3344,13 @@ class AIAgent:
                 self.X.append(self.extract(ctx))
                 self.y.append(label)
 
-        random.shuffle(list(zip(self.X, self.y)))
         if self.has_ml:
-            self._train()
+            self._train_rf()
+            self._init_sgd()
         self._save()
 
     # ------------------------------------------------------------------
-    # Feature extraction
+    # Feature extraction (13 features)
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -3254,54 +3366,121 @@ class AIAgent:
             return 0.5
 
     def extract(self, ctx: dict) -> list[float]:
+        timeouts = ctx.get('timeouts', 0)
+        m_msgs   = ctx.get('m_msgs', 0)
+        total    = timeouts + m_msgs
+        frame_loss = timeouts / total if total > 0 else 0.0
+
         return [
-            self._norm_signal(ctx.get('signal', -50)),
-            1.0 if str(ctx.get('wps_version', '1.0')) == '2.0' else 0.0,
-            1 if ctx.get('wps_locked', False) else 0,
-            1 if ctx.get('is_vulnerable', False) else 0,
-            min(ctx.get('attempt', 1), 20) / 20.0,
-            min(ctx.get('timeouts', 0), 10) / 10.0,
-            min(ctx.get('resp_delay', 0.0), 30.0) / 30.0,
-            min(ctx.get('m_msgs', 0), 8) / 8.0,
-            min(ctx.get('fails', 0), 10) / 10.0,
-            1.0 if ctx.get('signal', -50) > -70 else 0.0,
-            self._oui_hash(ctx.get('bssid', '00:00:00:00:00:00')),
+            self._norm_signal(ctx.get('signal', -50)),            # 0  signal
+            1.0 if str(ctx.get('wps_version', '1.0')) == '2.0' else 0.0,  # 1  wps_ver
+            1 if ctx.get('wps_locked', False) else 0,             # 2  wps_locked
+            1 if ctx.get('is_vulnerable', False) else 0,          # 3  is_vuln
+            min(ctx.get('attempt', 1), 20) / 20.0,                # 4  attempt
+            min(timeouts, 10) / 10.0,                              # 5  timeouts
+            min(ctx.get('resp_delay', 0.0), 30.0) / 30.0,        # 6  resp_delay
+            min(m_msgs, 8) / 8.0,                                  # 7  m_msgs
+            min(ctx.get('fails', 0), 10) / 10.0,                  # 8  fails
+            1.0 if ctx.get('signal', -50) > -70 else 0.0,         # 9  sig_ok
+            self._oui_hash(ctx.get('bssid', '00:00:00:00:00:00')),# 10 oui
+            frame_loss,                                            # 11 frame_loss
+            min(ctx.get('hist_locks', 0), 10) / 10.0,            # 12 hist_locks
         ]
 
     # ------------------------------------------------------------------
-    # Decision
+    # Q-Learning helpers
+    # ------------------------------------------------------------------
+
+    def _discretize(self, ctx: dict) -> str:
+        """Map continuous context to a compact discrete state key."""
+        sig = ctx.get('signal', -50)
+        s   = 'W' if sig < -80 else ('M' if sig < -60 else 'S')
+        l   = 'L' if ctx.get('wps_locked', False) else 'N'
+        t   = ctx.get('timeouts', 0)
+        t_k = '0' if t == 0 else ('1' if t <= 2 else '3')
+        m   = ctx.get('m_msgs', 0)
+        m_k = '0' if m == 0 else ('1' if m <= 3 else '4')
+        f   = ctx.get('fails', 0)
+        f_k = '0' if f == 0 else ('1' if f <= 3 else '4')
+        a   = ctx.get('attempt', 1)
+        a_k = '1' if a == 1 else ('2' if a <= 3 else '4')
+        return f'{s}{l}|{t_k}|{m_k}|{f_k}|{a_k}'
+
+    def _q_update(self, state: str, action: str, reward: float, next_state: str):
+        for s in (state, next_state):
+            if s not in self.q_table:
+                self.q_table[s] = {a: 0.0 for a in self.ACTIONS}
+
+        old_q     = self.q_table[state][action]
+        max_next  = max(self.q_table[next_state].values())
+        new_q     = old_q + self._Q_ALPHA * (reward + self._Q_GAMMA * max_next - old_q)
+        self.q_table[state][action] = new_q
+
+    def _q_best(self, state: str) -> str | None:
+        if state not in self.q_table:
+            return None
+        return max(self.q_table[state], key=self.q_table[state].get)
+
+    # ------------------------------------------------------------------
+    # Decision — weighted ensemble
     # ------------------------------------------------------------------
 
     def decide(self, phase: str, ctx: dict) -> str:
         """Return 'proceed', 'wait', 'skip', or 'abort'."""
         feat = self.extract(ctx)
 
-        if self.has_ml and self.model is not None:
-            try:
-                import numpy as np
-                pred   = self.model.predict([feat])[0]
-                proba  = max(self.model.predict_proba([feat])[0])
-                if proba >= 0.4:
-                    return pred
-            except Exception:
-                pass
+        if self.has_ml:
+            votes: dict[str, float] = {}
+
+            # Vote 1: Random Forest (weight 0.4)
+            if self.rf_model is not None:
+                try:
+                    pred  = self.rf_model.predict([feat])[0]
+                    proba = max(self.rf_model.predict_proba([feat])[0])
+                    if proba >= 0.3:
+                        votes[pred] = votes.get(pred, 0) + 0.4 * proba
+                except Exception:
+                    pass
+
+            # Vote 2: SGD online classifier (weight 0.3)
+            if self.sgd_model is not None:
+                try:
+                    pred = self.sgd_model.predict([feat])[0]
+                    votes[pred] = votes.get(pred, 0) + 0.3
+                except Exception:
+                    pass
+
+            # Vote 3: Q-Learning table (weight 0.3)
+            state  = self._discretize(ctx)
+            q_best = self._q_best(state)
+            if q_best is not None:
+                q_val = self.q_table[state][q_best]
+                if q_val > 0:
+                    votes[q_best] = votes.get(q_best, 0) + 0.3
+
+            if votes:
+                return max(votes, key=votes.get)
 
         return self._heuristic(feat, phase)
 
     def _heuristic(self, f: list[float], _phase: str) -> str:
-        locked  = f[2]
-        vuln    = f[3]
-        sig_ok  = f[9]
+        """Pure rule-based fallback — always available, no ML required."""
+        locked   = f[2]
+        vuln     = f[3]
+        sig_ok   = f[9]
         timeouts = f[5] * 10
         m_msgs   = f[7] * 8
         fails    = f[8] * 10
         attempt  = f[4] * 20
+        f_loss   = f[11]
 
         if locked and fails > 5:
             return 'abort'
         if timeouts >= 3 and m_msgs == 0:
             return 'abort'
         if fails >= 5 and m_msgs == 0:
+            return 'abort'
+        if f_loss > 0.8 and m_msgs == 0:
             return 'abort'
         if locked:
             return 'wait'
@@ -3316,20 +3495,41 @@ class AIAgent:
         return 'proceed'
 
     # ------------------------------------------------------------------
-    # Online learning
+    # Online learning — called after every connection attempt
     # ------------------------------------------------------------------
 
     def record(self, ctx: dict, action: str, success: bool):
-        feat = self.extract(ctx)
+        feat  = self.extract(ctx)
+        state = self._discretize(ctx)
+
+        # Store observation
         self.X.append(feat)
         self.y.append('proceed' if success else 'skip')
 
+        # Q-Learning reward update
+        reward = 1.0 if success else -0.1
+        self._q_update(state, action, reward, state)
+        self.reward_history.append(reward)
+
+        # SGD online partial_fit
+        self._online_fit(feat, 'proceed' if success else 'skip')
+
+        # Keep dataset bounded
         if len(self.X) > 500:
             self.X, self.y = self.X[-500:], self.y[-500:]
+        if len(self.reward_history) > 500:
+            self.reward_history = self.reward_history[-500:]
+
+        # Periodic RF retrain
         if len(self.X) % 10 == 0 and self.has_ml:
-            self._train()
+            self._train_rf()
+
+    # ------------------------------------------------------------------
+    # Dynamic timeout prediction
+    # ------------------------------------------------------------------
 
     def predict_timeout(self, base: float, ctx: dict) -> float:
+        """Adjust timeout based on signal and history."""
         signal   = ctx.get('signal', -50)
         timeouts = ctx.get('timeouts', 0)
         if signal < -80:
@@ -3341,8 +3541,16 @@ class AIAgent:
         return base
 
     def status(self) -> str:
-        mode = 'ML' if (self.has_ml and self.model) else 'heuristic'
-        return f'AI Agent ready ({mode}, {len(self.X)} observations)'
+        parts = []
+        if self.has_ml and self.rf_model:
+            parts.append('RF')
+        if self.has_ml and self.sgd_model:
+            parts.append('SGD')
+        if self.q_table:
+            parts.append(f'Q({len(self.q_table)})')
+        if not parts:
+            parts.append('heuristic')
+        return f'AI Agent ready ({", ".join(parts)}, {len(self.X)} obs)'
 
 
 def scanForNetworks(interface: str, vuln_list: list[str]) -> tuple[str, dict] | None:
@@ -3376,6 +3584,7 @@ def autoAttack(interface: str, bssid: str, vuln_list_file: str,
         'resp_delay':    0.0,
         'm_msgs':        0,
         'fails':         0,
+        'hist_locks':    0,
     }
 
     # ----- Step 1: Vulnerable list -----
@@ -3595,6 +3804,7 @@ def main():
 
     checkRequirements()
     setupDirectories()
+    _ensure_ml_deps()
 
     logger.initializeLogging()
 
