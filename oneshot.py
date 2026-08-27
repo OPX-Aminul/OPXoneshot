@@ -815,6 +815,7 @@ def error(message: str):
 
 import argparse
 import os
+import threading
 
 def parseArgs():
     """Parse arguments passed to the main python script."""
@@ -3317,7 +3318,7 @@ class AIAgent:
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def __init__(self, profile: str = None):
+    def __init__(self, profile: str = None, quiet: bool = False):
         self.has_ml    = False
         self.rf_model  = None          # RandomForestClassifier (batch)
         self.sgd_model = None          # SGDClassifier (online partial_fit)
@@ -3352,7 +3353,8 @@ class AIAgent:
         if len(self.X) < 5:
             self._pretrain()
 
-        logger.info(f'[AI] {self.status()}')
+        if not quiet:
+            logger.info(f'[AI] {self.status()}')
 
     # ------------------------------------------------------------------
     # Improvement 10: per-user training collection
@@ -3378,8 +3380,7 @@ class AIAgent:
                 self.training_log = []
 
     def _append_training_log(self, entry: dict):
-        entry['user'] = self.user_id
-        entry['ts']   = time.time()
+        entry.setdefault('pushed', False)   # not yet uploaded to Supabase
         self.training_log.append(entry)
         self.training_log = self.training_log[-2000:]
         try:
@@ -4245,10 +4246,7 @@ def _aiAutonomousMode():
     print(f'[AI] Model saved: {agent.status()}')
 
     # Auto-push new training data to Supabase community store
-    try:
-        SyncEngine().push_data(agent)
-    except Exception:
-        pass
+    _autoSync()
     print()
 
 def _installGlobally():
@@ -4348,12 +4346,13 @@ class SyncEngine:
         }
 
     # ---- upload local training log ---------------------------------------
-    def push_data(self, agent: AIAgent = None) -> int:
+    def push_data(self, agent: AIAgent = None, quiet: bool = False) -> int:
         if agent is None:
             agent = AIAgent()
-        rows = agent.training_log[-500:]
+        rows = [r for r in agent.training_log if not r.get('pushed')][-500:]
         if not rows:
-            print('[sync] Nothing new to upload')
+            if not quiet:
+                print('[sync] Nothing new to upload')
             return 0
 
         # Normalize each recorded entry into a DB row
@@ -4376,26 +4375,37 @@ class SyncEngine:
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 body = resp.read().decode()
-                print(f'[sync] Uploaded {len(payload)} records (+{resp.status})')
+                if not quiet:
+                    print(f'[sync] Uploaded {len(payload)} records (+{resp.status})')
+                # Mark uploaded entries so they are never sent again
+                for r in rows:
+                    r['pushed'] = True
+                try:
+                    with open(agent._TRAIN, 'w') as f:
+                        json.dump(agent.training_log, f)
+                except Exception:
+                    pass
                 return len(payload)
         except urllib.error.HTTPError as e:
             body = e.read().decode()
-            if 'PGRST205' in body:
-                print('[sync] Table \'training_data\' missing.')
-                print('[sync] Run supabase_setup.sql in your Supabase SQL Editor first.')
-            else:
-                print(f'[sync] Upload failed: {e.code} {body[:200]}')
+            if not quiet:
+                if 'PGRST205' in body:
+                    print('[sync] Table \'training_data\' missing.')
+                    print('[sync] Run supabase_setup.sql in your Supabase SQL Editor first.')
+                else:
+                    print(f'[sync] Upload failed: {e.code} {body[:200]}')
             return 0
         except Exception as e:
-            print(f'[sync] Upload error: {e}')
+            if not quiet:
+                print(f'[sync] Upload error: {e}')
             return 0
 
     # ---- download all community rows -------------------------------------
-    def pull_data(self, agent: AIAgent = None) -> tuple[AIAgent, int]:
+    def pull_data(self, agent: AIAgent = None, quiet: bool = False) -> tuple[AIAgent, int]:
         import urllib.request, urllib.parse
 
         if agent is None:
-            agent = AIAgent()
+            agent = AIAgent(quiet=True)
 
         limit = 2000
         offset = 0
@@ -4415,7 +4425,8 @@ class SyncEngine:
                     rows = json.loads(resp.read().decode())
             except urllib.error.HTTPError as e:
                 body = e.read().decode()
-                print(f'[sync] Pull failed: {e.code} {body[:200]}')
+                if not quiet:
+                    print(f'[sync] Pull failed: {e.code} {body[:200]}')
                 break
             except Exception as e:
                 print(f'[sync] Pull error: {e}')
@@ -4449,7 +4460,8 @@ class SyncEngine:
             if len(rows) < limit:
                 break
 
-        print(f'[sync] Pulled {merged_obs} merged observations ({len(agent.X)} total)')
+        if not quiet:
+            print(f'[sync] Pulled {merged_obs} merged observations ({len(agent.X)} total)')
         return agent, merged_obs
 
     # ---- full pipeline: push + pull + retrain + git push -----------------
@@ -4502,14 +4514,84 @@ class SyncEngine:
         return True
 
 
-def _tryAutoPush(agent):
-    """Quietly push any new training data to Supabase after an attack.
-    Never blocks or crashes the main flow."""
+def _ensure_sync_state():
+    """Read/write the auto-sync throttle state (~/.OneShot-Extended/last_sync.json)."""
+    state_file = os.path.join(os.path.expanduser('~'), '.OneShot-Extended', 'last_sync.json')
+    state = {'last_sync': 0, 'last_git': 0, 'pushed': 0}
+    if os.path.exists(state_file):
+        try:
+            with open(state_file) as f:
+                state.update(json.load(f))
+        except Exception:
+            pass
+    return state, state_file
+
+
+def _autoSync(do_git: bool = False):
+    """Silent community sync — runs after every attack, never blocks visibly.
+
+    Inline (guaranteed, fast): pushes any fresh training data to Supabase.
+    Background (best-effort, throttled to 30 min): pulls community rows,
+    merges, retrains, saves, and optionally git-pushes once per day.
+    """
+    state, state_file = _ensure_sync_state()
+    now = time.time()
+
+    # --- Inline fast push: guarantee fresh data reaches Supabase ---
     try:
-        if agent and getattr(agent, 'training_log', None):
-            SyncEngine().push_data(agent)
+        agent = AIAgent(quiet=True)
+        if agent.training_log:
+            SyncEngine().push_data(agent, quiet=True)
     except Exception:
         pass
+
+    # --- Background pull + train, throttled ---
+    if now - state.get('last_sync', 0) < 30 * 60:
+        return
+
+    def _worker():
+        try:
+            engine = SyncEngine()
+            agent = AIAgent(quiet=True)
+            agent._seen_keys = set()
+
+            # 2. pull community
+            agent, n = engine.pull_data(agent, quiet=True)
+
+            # 3. retrain
+            if agent.has_ml and len(agent.X) >= 20:
+                try:
+                    agent._train_rf()
+                except Exception:
+                    pass
+
+            agent.finalize()
+            syncModelToRepo(agent)
+
+            # 4. optional git push (throttled to once per day)
+            if do_git and now - state.get('last_git', 0) > 24 * 3600:
+                import subprocess
+                cwd = os.path.dirname(os.path.abspath(__file__))
+                msg = f'training: auto-sync Q({len(agent.q_table)}) obs({len(agent.X)})'
+                subprocess.run(['git', 'add', '-A'], cwd=cwd, capture_output=True, timeout=30)
+                r = subprocess.run(['git', 'commit', '-m', msg], cwd=cwd,
+                                   capture_output=True, text=True, timeout=30)
+                if 'nothing to commit' not in (r.stdout + r.stderr):
+                    subprocess.run(['git', 'push', 'origin'], cwd=cwd,
+                                   capture_output=True, text=True, timeout=120)
+                    state['last_git'] = now
+
+            state['last_sync'] = now
+            with open(state_file, 'w') as f:
+                json.dump(state, f)
+        except Exception:
+            pass
+
+    try:
+        threading.Thread(target=_worker, daemon=True).start()
+    except Exception:
+        pass
+
 
 def _syncHandler(args):
     """Handle --sync / --push-data / --pull-data."""
@@ -4730,6 +4812,12 @@ def main():
 
             if args.restore:
                 src.utils.restoreProcesses()
+
+    # Silent background community sync (user never sees this)
+    if not (getattr(args, 'sync', False) or getattr(args, 'push_data', False)
+            or getattr(args, 'pull_data', False)):
+        _autoSync()
+
 
 if __name__ == '__main__':
     main()
