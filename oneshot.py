@@ -4739,6 +4739,396 @@ class DelayBandit:
 # ═══════════════════════════════════════════════════════════════════════════
 # ADVANCEMENT 4: Lightweight Deep Q-Network (pure numpy)
 # ═══════════════════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ADVANCEMENT 5: Adaptive Rate Limiting & Stealth Jitter
+# ═══════════════════════════════════════════════════════════════════════════
+# Random micro-delays between attempts to evade firewall/IDS detection.
+# Uses normal distribution centered on base delay with configurable jitter.
+
+class StealthJitter:
+    """Adaptive rate limiter with random micro-jitter for stealth.
+    
+    Adds random delay between WPS attempts so no two consecutive requests
+    have identical timing. Prevents fingerprint-based detection by routers
+    that monitor request intervals.
+    
+    Jitter modes:
+      - 'organic': Normal distribution around human-like timing
+      - 'bursty': Occasional fast bursts with longer pauses (mimics real user)
+      - 'slow_drip': Very slow, patient approach for locked routers
+    """
+    MODES = {
+        'organic':   {'base': 2.0, 'jitter_std': 0.8, 'min': 0.5, 'max': 8.0},
+        'bursty':    {'base': 1.0, 'jitter_std': 1.5, 'min': 0.2, 'max': 12.0},
+        'slow_drip': {'base': 5.0, 'jitter_std': 1.0, 'min': 2.0, 'max': 15.0},
+    }
+    _DIR = os.path.join(os.path.expanduser('~'), '.OneShot-Extended')
+    _STATE_FILE = os.path.join(_DIR, 'stealth_jitter.pkl')
+
+    def __init__(self, mode='organic'):
+        self.mode = mode if mode in self.MODES else 'organic'
+        self.cfg = self.MODES[self.mode]
+        self._attempt_count = 0
+        self._lock_streak = 0
+        self._last_delay = 0.0
+        self._history = []  # recent delays for pattern analysis
+        self._load()
+
+    def _load(self):
+        try:
+            if os.path.exists(self._STATE_FILE):
+                import pickle
+                with open(self._STATE_FILE, 'rb') as f:
+                    d = pickle.load(f)
+                self.mode = d.get('mode', self.mode)
+                self.cfg = self.MODES.get(self.mode, self.MODES['organic'])
+                self._attempt_count = d.get('attempts', 0)
+                self._lock_streak = d.get('lock_streak', 0)
+        except Exception:
+            pass
+
+    def _save(self):
+        try:
+            os.makedirs(self._DIR, exist_ok=True)
+            import pickle
+            with open(self._STATE_FILE, 'wb') as f:
+                pickle.dump({
+                    'mode': self.mode,
+                    'attempts': self._attempt_count,
+                    'lock_streak': self._lock_streak,
+                }, f)
+        except Exception:
+            pass
+
+    def next_delay(self) -> float:
+        """Calculate next delay with jitter. Adapts based on lock history."""
+        import random, math
+        # Adaptive: if we're getting locked, slow down
+        if self._lock_streak >= 3:
+            base = self.cfg['base'] * 2.0
+            std = self.cfg['jitter_std'] * 1.5
+        elif self._lock_streak >= 1:
+            base = self.cfg['base'] * 1.3
+            std = self.cfg['jitter_std'] * 1.2
+        else:
+            base = self.cfg['base']
+            std = self.cfg['jitter_std']
+
+        # Normal distribution jitter
+        delay = random.gauss(base, std)
+        delay = max(self.cfg['min'], min(self.cfg['max'], delay))
+
+        # Add micro-jitter (±50ms random micro-fluctuation)
+        micro = random.uniform(-0.05, 0.05)
+        delay = max(0.1, delay + micro)
+
+        self._last_delay = round(delay, 3)
+        self._history.append(self._last_delay)
+        if len(self._history) > 100:
+            self._history = self._history[-100:]
+        return self._last_delay
+
+    def record_attempt(self, locked: bool):
+        """Record attempt result for adaptive behavior."""
+        self._attempt_count += 1
+        if locked:
+            self._lock_streak += 1
+        else:
+            self._lock_streak = max(0, self._lock_streak - 1)
+        # Auto-switch mode based on behavior
+        if self._lock_streak >= 5 and self.mode != 'slow_drip':
+            self.mode = 'slow_drip'
+            self.cfg = self.MODES['slow_drip']
+        elif self._lock_streak == 0 and self._attempt_count > 20 and self.mode == 'slow_drip':
+            self.mode = 'organic'
+            self.cfg = self.MODES['organic']
+        self._save()
+
+    def status(self) -> str:
+        return f'Jitter({self.mode}, attempts={self._attempt_count}, streak={self._lock_streak})'
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ADVANCEMENT 6: Adversarial Noise Injection (Poison Guard)
+# ═══════════════════════════════════════════════════════════════════════════
+# Protects AI brain from trap responses and misleading signals.
+# Detects adversarial patterns that could poison Q-Table or SGD weights.
+
+class PoisonGuard:
+    """Adversarial noise injection and trap detection for AI brain protection.
+    
+    Detects and filters:
+    1. Honeypot/trap responses (too-perfect success patterns)
+    2. Signal spoofing (impossible signal jumps)
+    3. Rapid lock cycling (router fighting back)
+    4. Statistical anomalies (outlier detection)
+    5. Adversarial feature perturbation
+    """
+    _DIR = os.path.join(os.path.expanduser('~'), '.OneShot-Extended')
+    _STATE_FILE = os.path.join(_DIR, 'poison_guard.pkl')
+
+    def __init__(self):
+        self._trap_count = 0
+        self._blocked_count = 0
+        self._signal_history = []  # recent signal readings
+        self._reward_history = []  # recent rewards
+        self._suspicious_patterns = []
+        self._load()
+
+    def _load(self):
+        try:
+            if os.path.exists(self._STATE_FILE):
+                import pickle
+                with open(self._STATE_FILE, 'rb') as f:
+                    d = pickle.load(f)
+                self._trap_count = d.get('traps', 0)
+                self._blocked_count = d.get('blocked', 0)
+        except Exception:
+            pass
+
+    def _save(self):
+        try:
+            os.makedirs(self._DIR, exist_ok=True)
+            import pickle
+            with open(self._STATE_FILE, 'wb') as f:
+                pickle.dump({
+                    'traps': self._trap_count,
+                    'blocked': self._blocked_count,
+                }, f)
+        except Exception:
+            pass
+
+    def is_trap(self, ctx: dict, action: str, success: bool, reward: float) -> bool:
+        """Detect if this observation is a potential trap/poison.
+        
+        Returns True if the observation should be BLOCKED from training.
+        """
+        reasons = []
+
+        # 1. Honeypot detection: suspiciously perfect success on first try
+        if success and ctx.get('attempt', 1) <= 1 and ctx.get('signal', -50) < -60:
+            # Weak signal + immediate success = likely trap
+            reasons.append('honeypot_weak_signal')
+
+        # 2. Signal spoofing: impossible signal jumps (>30dBm in one reading)
+        signal = ctx.get('signal', -50)
+        self._signal_history.append(signal)
+        if len(self._signal_history) > 5:
+            recent = self._signal_history[-5:]
+            max_jump = max(abs(recent[i] - recent[i-1]) for i in range(1, len(recent)))
+            if max_jump > 30:
+                reasons.append(f'signal_spoof_{max_jump:.0f}dBm_jump')
+
+        # 3. Rapid lock cycling: lock/unlock/lock pattern (anti-bruteforce)
+        if len(self._signal_history) >= 3:
+            last3 = self._signal_history[-3:]
+            if last3[0] > -50 and last3[1] < -80 and last3[2] > -50:
+                reasons.append('rapid_lock_cycling')
+
+        # 4. Reward anomaly: reward too high or too low
+        if reward > 2.0 or reward < -1.5:
+            reasons.append(f'reward_anomaly_{reward:.2f}')
+
+        # 5. Timing anomaly: response too fast (<100ms = fake)
+        resp_delay = ctx.get('resp_delay', 1.0)
+        if resp_delay < 0.1:
+            reasons.append('timing_anomaly_too_fast')
+
+        # 6. Feature coherence check: signal_ok should match signal
+        sig_ok = ctx.get('sig_ok', 0)
+        if signal > -70 and sig_ok == 0:
+            reasons.append('feature_incoherence_sig_ok')
+        if signal < -70 and sig_ok == 1:
+            reasons.append('feature_incoherence_sig_bad')
+
+        if reasons:
+            self._trap_count += 1
+            self._suspicious_patterns.append({
+                'reasons': reasons,
+                'signal': signal,
+                'attempt': ctx.get('attempt', 1),
+                'success': success,
+            })
+            if len(self._suspicious_patterns) > 50:
+                self._suspicious_patterns = self._suspicious_patterns[-50:]
+            self._save()
+            return True
+        return False
+
+    def sanitize_reward(self, reward: float, ctx: dict) -> float:
+        """Clamp and normalize reward to prevent extreme poisoning."""
+        # Clip reward to safe range
+        reward = max(-1.0, min(1.5, reward))
+        # Reduce reward for suspicious patterns
+        if ctx.get('timeouts', 0) >= 3:
+            reward = min(reward, -0.1)
+        return round(reward, 3)
+
+    def adversarial_perturb(self, feat: list, magnitude: float = 0.02) -> list:
+        """Add tiny adversarial noise to features during training for robustness.
+        
+        This makes the model resistant to adversarial examples.
+        """
+        import random
+        perturbed = []
+        for f in feat:
+            noise = random.gauss(0, magnitude)
+            perturbed.append(max(0.0, min(1.0, f + noise)))
+        return perturbed
+
+    def should_block_training(self) -> bool:
+        """If too many traps detected recently, pause training to protect brain."""
+        return self._trap_count > 50
+
+    def status(self) -> str:
+        return f'PoisonGuard(traps={self._trap_count}, blocked={self._blocked_count})'
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ADVANCEMENT 7: Multi-Interface Swarm Mode
+# ═══════════════════════════════════════════════════════════════════════════
+# Parallel scanning with multiple WiFi adapters for maximum throughput.
+
+class SwarmMode:
+    """Multi-adapter parallel scanning and attack coordination.
+    
+    When multiple WiFi interfaces are available:
+    1. Auto-detect all wireless interfaces
+    2. Assign targets across adapters (load balancing)
+    3. Coordinate parallel scans on different channels
+    4. Merge results into unified intelligence
+    
+    Uses ThreadPoolExecutor for I/O-bound WiFi operations.
+    """
+    _DIR = os.path.join(os.path.expanduser('~'), '.OneShot-Extended')
+    _STATE_FILE = os.path.join(_DIR, 'swarm_mode.pkl')
+
+    def __init__(self):
+        self._interfaces = []
+        self._active_workers = 0
+        self._total_scans = 0
+        self._results_merged = 0
+        self._load()
+
+    def _load(self):
+        try:
+            if os.path.exists(self._STATE_FILE):
+                import pickle
+                with open(self._STATE_FILE, 'rb') as f:
+                    d = pickle.load(f)
+                self._total_scans = d.get('total_scans', 0)
+                self._results_merged = d.get('results_merged', 0)
+        except Exception:
+            pass
+
+    def _save(self):
+        try:
+            os.makedirs(self._DIR, exist_ok=True)
+            import pickle
+            with open(self._STATE_FILE, 'wb') as f:
+                pickle.dump({
+                    'total_scans': self._total_scans,
+                    'results_merged': self._results_merged,
+                }, f)
+        except Exception:
+            pass
+
+    def detect_interfaces(self) -> list:
+        """Auto-detect all available wireless interfaces."""
+        interfaces = []
+        try:
+            import subprocess
+            result = subprocess.run(
+                ['iw', 'dev'], capture_output=True, text=True, timeout=5
+            )
+            for line in result.stdout.split('\\n'):
+                line = line.strip()
+                if line.startswith('Interface'):
+                    iface = line.split()[-1]
+                    interfaces.append(iface)
+        except Exception:
+            pass
+        # Fallback: check common interface names
+        if not interfaces:
+            for name in ['wlan0', 'wlan1', 'wlan2', 'wlp2s0', 'wlx']:
+                path = f'/sys/class/net/{name}'
+                if os.path.exists(path):
+                    interfaces.append(name)
+        self._interfaces = interfaces
+        return interfaces
+
+    def parallel_scan(self, scan_func, targets: list, max_workers: int = None) -> list:
+        """Execute scans in parallel across available interfaces.
+        
+        Args:
+            scan_func: Callable(interface, target) -> result
+            targets: List of targets to scan
+            max_workers: Max parallel workers (default: num interfaces)
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import threading
+
+        if not self._interfaces:
+            self.detect_interfaces()
+        if not self._interfaces:
+            return []
+
+        workers = max_workers or len(self._interfaces)
+        results = []
+        lock = threading.Lock()
+
+        def _worker(iface, target):
+            try:
+                result = scan_func(iface, target)
+                with lock:
+                    results.append(result)
+                    self._total_scans += 1
+            except Exception:
+                pass
+            finally:
+                with lock:
+                    self._active_workers -= 1
+
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            for i, target in enumerate(targets):
+                iface = self._interfaces[i % len(self._interfaces)]
+                with lock:
+                    self._active_workers += 1
+                executor.submit(_worker, iface, target)
+
+        self._results_merged += len(results)
+        self._save()
+        return results
+
+    def assign_targets(self, targets: list) -> dict:
+        """Distribute targets across interfaces (round-robin load balancing)."""
+        if not self._interfaces:
+            self.detect_interfaces()
+        if not self._interfaces:
+            self._interfaces = ['wlan0']
+        assignment = {iface: [] for iface in self._interfaces}
+        for i, target in enumerate(targets):
+            iface = self._interfaces[i % len(self._interfaces)]
+            assignment[iface].append(target)
+        return assignment
+
+    def merge_results(self, result_lists: list) -> list:
+        """Merge parallel scan results, dedup by BSSID."""
+        seen = set()
+        merged = []
+        for results in result_lists:
+            for r in results:
+                bssid = r.get('bssid', '') if isinstance(r, dict) else ''
+                if bssid and bssid not in seen:
+                    seen.add(bssid)
+                    merged.append(r)
+        return merged
+
+    def status(self) -> str:
+        ifaces = ', '.join(self._interfaces) if self._interfaces else 'none'
+        return f'Swarm({len(self._interfaces)} adapters: {ifaces}, scans={self._total_scans})'
+
 class DQNetwork:
     _DIR = os.path.join(os.path.expanduser('~'), '.OneShot-Extended')
     _STATE_FILE = os.path.join(_DIR, 'dqn_state.pkl')
@@ -4945,6 +5335,12 @@ class AIAgent:
         self.dqn = DQNetwork(state_dim=16, action_dim=len(self.ACTIONS))
         # ADVANCEMENT 1: chipset cache
         self._chipset_cache = {}
+        # ADVANCEMENT 5: Stealth Jitter
+        self.jitter = StealthJitter(mode='organic')
+        # ADVANCEMENT 6: Poison Guard
+        self.poison_guard = PoisonGuard()
+        # ADVANCEMENT 7: Swarm Mode
+        self.swarm = SwarmMode()
 
         if len(self.X) < 5:
             self._pretrain()
@@ -5423,6 +5819,14 @@ class AIAgent:
             reward -= 0.1 if action == 'abort' else 0.0
         reward = round(reward, 3)
 
+        # ADVANCEMENT 6: Poison Guard — sanitize reward and check for traps
+        is_trap = self.poison_guard.is_trap(ctx, action, success, reward)
+        reward = self.poison_guard.sanitize_reward(reward, ctx)
+        if is_trap:
+            # Don't update Q-Table with poisoned data
+            self.poison_guard._blocked_count += 1
+            self.poison_guard._save()
+            return
         self._q_update(state, action, reward, state)
         self.reward_history.append(reward)
 
@@ -5453,6 +5857,11 @@ class AIAgent:
             delay_used = ctx.get('resp_delay', 1.0)
             mab_reward = 1.0 if success else (-0.5 if ctx.get('wps_locked', False) else 0.0)
             self.delay_bandit.update(delay_used, mab_reward)
+        except Exception:
+            pass
+        # ADVANCEMENT 5: Record attempt for jitter adaptation
+        try:
+            self.jitter.record_attempt(ctx.get('wps_locked', False))
         except Exception:
             pass
 
@@ -5504,6 +5913,9 @@ class AIAgent:
             parts.append(f'Q({len(self.q_table)})')
         parts.append(f'DQN(buf={len(self.dqn.replay_buffer)})')
         parts.append(f'MAB({self.delay_bandit.total_pulls} pulls)')
+        parts.append(f'Jitter({self.jitter.mode})')
+        parts.append(f'Guard({self.poison_guard._trap_count} traps)')
+        parts.append(f'Swarm({len(self.swarm._interfaces)} adapters)')
         if not parts:
             parts.append('heuristic')
         return f'AI Agent ready ({", ".join(parts)}, {len(self.X)} obs)'
