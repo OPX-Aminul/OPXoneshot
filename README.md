@@ -16,7 +16,10 @@ A single-file, self-contained WPS (Wi-Fi Protected Setup) auditing tool with emb
 - **Auto Dependency Installer** -- Installs pixiewps, reaver, bully, iw automatically
 - **Global Command** -- `wifi4` works from any directory after one-time install
 - **WPS State Diagnostics** -- Checks if WPS is enabled, locked, or disabled before attacking
-- **Single File** -- Everything in `oneshot.py` (4100+ lines)
+- **Community Learning Sync** -- Auto-syncs attack data + model across all users (Supabase + GitHub), zero flags
+- **Safety & Robustness** -- Event validation, noise/poison filtering, 100MB footprint guard, atomic save + rollback, offline queue, concurrency lock
+- **Golden Model CI** -- GitHub Actions rebuilds a clean shared model every 3 days
+- **Single File Core** -- Everything in `oneshot.py` (5250+ lines)
 
 ---
 
@@ -109,12 +112,35 @@ sudo python3 oneshot.py --install
 Every time you run `wifi4` (or `oneshot.py`), the AI **automatically**:
 
 1. **Learns the newest shared model** from GitHub (`git fetch` + checkout latest `models/`)
-2. **Pushes your fresh attack data** to the Supabase community store
-3. **Pulls only the new community rows** since your last sync and learns them in ~1 second (incremental SGD — no full model download)
+2. **Uploads queued offline events** (durable JSONL queue — survives crashes / no-network)
+3. **Pushes your fresh attack data** to the Supabase community store (idempotent `event_id`)
+4. **Pulls only the new community rows** since your last sync and learns them in ~1 second (incremental SGD — no full model download)
+5. **Filters noise / poisoning** on ingest (low-quality events rejected; GC keeps high-value + rare + recent)
 
 No flags, no user action. New users who clone the repo immediately get the latest trained model.
 
-Background (throttled every 30 min): the model is fully retrained on the merged community data and pushed back to GitHub automatically (once per day).
+Background (throttled every 30 min, once-per-day git push): the model is fully retrained on the merged community data and pushed back to GitHub automatically.
+
+#### Safety & Robustness (built-in, no config)
+
+| Protection | Behavior |
+|---|---|
+| Event validation | Rejects NaN/inf/impossible signal/reward/bad action |
+| Noise / poison filter | Drops events with quality score < 0.25 on pull |
+| Footprint guard | Warns at 80 MB, critical 90 MB, hard-cap 100 MB |
+| Garbage collection | Smart retention (high-quality + rare-success + recent), not blind top-N |
+| Atomic save | Write to `.tmp`, validate, `os.replace`; keeps `.prev` for rollback |
+| Offline queue | Durable JSONL; replays on reconnect (two-way sync) |
+| Concurrency lock | Exclusive `.sync.lock` prevents overlapping syncs |
+| Retry / backoff | Exponential backoff on transient HTTP failures |
+| Duplicate guard | `event_id` upsert + dedup set (idempotent) |
+| Versioning | `models/model_metadata.json` tracks model/dataset/feature versions |
+
+#### Privacy / Credentials
+
+- The **anon** Supabase key is used by default (safe for client insert/select).
+- The **service_role** key (cross-user reads for the golden model) is **never** in source — it is injected via the `SUPABASE_SERVICE_ROLE_KEY` GitHub secret.
+- `.env` is git-ignored; local dev loads it via `_load_env_file()`.
 
 Explicit commands still available:
 
@@ -148,6 +174,17 @@ python3 oneshot.py --pull-data     # only download new community rows
 Every user's `record()` calls are saved to `~/.OneShot-Extended/training_log.json`
 with a unique user id. Data flows to the shared Supabase table + GitHub model
 so everyone's model improves from everyone's experience.
+
+#### One-time setup (owner)
+
+```bash
+# 1. Create the Supabase table (run once in Supabase SQL Editor)
+#    -> see supabase_setup.sql
+
+# 2. Add GitHub repo secrets so the nightly golden-model build can read all rows:
+#    SUPABASE_URL              = https://oenckshhftqjjwhngxzo.supabase.co
+#    SUPABASE_SERVICE_ROLE_KEY = <service_role key from Supabase dashboard>
+```
 
 ---
 
@@ -228,14 +265,19 @@ The model is pre-trained with 2000+ episodes across 25 scenarios:
 
 ```
 OPXoneshot/
-+-- oneshot.py          # Main script (4100+ lines, everything included)
++-- oneshot.py                       # Main script (5250+ lines, everything included)
++-- model_build.py                   # Standalone golden-model trainer (CI)
++-- supabase_setup.sql               # One-time Supabase schema (event_id + quality)
++-- requirements.txt                 # scikit-learn, joblib, numpy
 +-- models/
-|   +-- ai_agent.joblib  # RF + SGD trained models (78KB)
-|   +-- ai_data.pkl      # 500 observations (60KB)
-|   +-- ai_qtable.pkl    # Q-table: 115 states (7KB)
-+-- vulnwsc.txt          # Vulnerable devices list (embedded in oneshot.py)
-+-- wifi4                # Shortcut script
-+-- README.md            # This file
+|   +-- ai_agent.joblib              # RF + SGD trained models (compressed)
+|   +-- ai_data.pkl                  # Observations
+|   +-- ai_qtable.pkl                # Q-table
+|   +-- model_metadata.json          # Model/dataset/feature versioning
++-- .github/workflows/
+|   +-- nightly-model-build.yml      # Cron every 3 days -> rebuild golden model
++-- wifi4                            # Shortcut script
++-- README.md                        # This file
 +-- .gitignore
 ```
 
@@ -323,6 +365,40 @@ Select target: 1
 
 [AI] Model saved: AI Agent ready (RF, SGD, Q(115), 500 obs)
 ```
+
+---
+
+## Community Learning Sync (Optional)
+
+The tool can share anonymized attack-outcome data and a shared model across
+users via **GitHub** (model binaries) and **Supabase** (event rows). This is
+fully opt-in and runs silently in the background; it never interferes with
+attacks.
+
+- Events are pushed with an `event_id` (idempotent) and `quality` score.
+- Only lightweight rows are synced, not full models.
+- The shared "golden" model is rebuilt periodically by CI and committed to
+  `models/`.
+
+### One-time setup (owner)
+
+1. Create the Supabase table once in the dashboard by running `supabase_setup.sql`.
+2. Add repo **Secrets** so the nightly workflow can read all rows:
+   - `SUPABASE_URL` = `https://oenckshhftqjjwhngxzo.supabase.co`
+   - `SUPABASE_SERVICE_ROLE_KEY` = the service_role key from the Supabase dashboard
+
+### Files added for this feature
+
+```
+model_build.py                  # Standalone golden-model trainer (run by CI)
+supabase_setup.sql              # One-time Supabase schema (event_id + quality)
+requirements.txt                # scikit-learn, joblib, numpy
+.github/workflows/nightly-model-build.yml  # Cron -> rebuild golden model
+```
+
+> The privileged `service_role` key is never hardcoded in source; it is
+> supplied only through the GitHub secret above. The public `anon` key is used
+> for client-side inserts.
 
 ---
 
