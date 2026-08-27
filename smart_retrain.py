@@ -47,6 +47,9 @@ FEATS = [
     'oui',          # 10 vendor hash 0..1
     'frame_loss',   # 11 0..1
     'hist_locks',   # 12 0..10 normalized → 0..1
+    'chip_id',      # 13 chipset ID (0-7) normalized → 0..1
+    'channel_cong', # 14 channel congestion 0..1
+    'noise_floor',  # 15 noise floor normalized -100..0 → 0..1
 ]
 
 ACTIONS = ('proceed', 'wait', 'skip', 'abort')
@@ -64,9 +67,11 @@ def _oui_hash(bssid):
         return 0.5
 
 def make_feat(signal, wps_ver, wps_locked, is_vuln, attempt,
-              timeouts, resp_delay, m_msgs, fails, hist_locks=0, bssid='AA:BB:CC:DD:EE:FF'):
+              timeouts, resp_delay, m_msgs, fails, hist_locks=0, bssid='AA:BB:CC:DD:EE:FF',
+              chip_id=0, channel_congestion=0.0, noise_floor=-90.0):
     sig_ok = 1.0 if signal > -70 else 0.0
     frame_loss = timeouts / (timeouts + m_msgs) if (timeouts + m_msgs) > 0 else 0.0
+    noise_norm = (max(-100.0, min(0.0, noise_floor)) + 100.0) / 100.0
     return [
         _norm_signal(signal),                    # signal
         1.0 if wps_ver == '2.0' else 0.0,       # wps_ver
@@ -81,6 +86,9 @@ def make_feat(signal, wps_ver, wps_locked, is_vuln, attempt,
         _oui_hash(bssid),                         # oui
         frame_loss,                               # frame_loss
         min(hist_locks, 10) / 10.0,              # hist_locks
+        min(chip_id, 7) / 7.0,                   # chip_id (NEW)
+        min(max(channel_congestion, 0.0), 1.0),  # channel_congestion (NEW)
+        noise_norm,                               # noise_floor (NEW)
     ]
 
 

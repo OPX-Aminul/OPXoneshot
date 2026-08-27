@@ -4634,6 +4634,221 @@ class WebIntelEngine:
 # AI Agent — hybrid RF + Q-Learning + SGD ensemble
 # ---------------------------------------------------------------------------
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ADVANCEMENT 1: Chipset Fingerprinting & Vendor Profiling
+# ═══════════════════════════════════════════════════════════════════════════
+CHIPSET_DB = {
+    'b4:fb:e4': {'chipset': 'broadcom', 'wps_quirk': 'pixie_dust_vuln', 'timeout_base': 5.0},
+    'dc:a6:32': {'chipset': 'broadcom', 'wps_quirk': 'pixie_dust_vuln', 'timeout_base': 5.0},
+    '00:90:4c': {'chipset': 'broadcom', 'wps_quirk': 'pixie_dust_vuln', 'timeout_base': 5.0},
+    '18:64:72': {'chipset': 'broadcom', 'wps_quirk': 'pixie_dust_vuln', 'timeout_base': 5.0},
+    '4c:ed:fb': {'chipset': 'broadcom', 'wps_quirk': 'pixie_dust_vuln', 'timeout_base': 5.0},
+    '9c:b6:d0': {'chipset': 'broadcom', 'wps_quirk': 'pixie_dust_vuln', 'timeout_base': 5.0},
+    '00:0c:43': {'chipset': 'mediatek', 'wps_quirk': 'slow_m3', 'timeout_base': 7.0},
+    '00:03:7f': {'chipset': 'mediatek', 'wps_quirk': 'slow_m3', 'timeout_base': 7.0},
+    '88:dc:96': {'chipset': 'mediatek', 'wps_quirk': 'slow_m3', 'timeout_base': 7.0},
+    '10:af:78': {'chipset': 'mediatek', 'wps_quirk': 'slow_m3', 'timeout_base': 7.0},
+    '00:e0:4c': {'chipset': 'realtek', 'wps_quirk': 'fast_timeout', 'timeout_base': 3.0},
+    '52:54:00': {'chipset': 'realtek', 'wps_quirk': 'fast_timeout', 'timeout_base': 3.0},
+    '00:1a:2b': {'chipset': 'realtek', 'wps_quirk': 'fast_timeout', 'timeout_base': 3.0},
+    '00:13:10': {'chipset': 'atheros', 'wps_quirk': 'pin_algo_vuln', 'timeout_base': 4.0},
+    '3c:ce:73': {'chipset': 'atheros', 'wps_quirk': 'pin_algo_vuln', 'timeout_base': 4.0},
+    '64:66:b3': {'chipset': 'atheros', 'wps_quirk': 'pin_algo_vuln', 'timeout_base': 4.0},
+    'cc:40:d0': {'chipset': 'atheros', 'wps_quirk': 'pin_algo_vuln', 'timeout_base': 4.0},
+    '00:25:9c': {'chipset': 'ralink', 'wps_quirk': 'm1_timeout', 'timeout_base': 6.0},
+    '00:50:43': {'chipset': 'marvell', 'wps_quirk': 'none', 'timeout_base': 5.0},
+    '24:6f:28': {'chipset': 'espressif', 'wps_quirk': 'esp_wps_bypass', 'timeout_base': 2.0},
+    '30:ae:a4': {'chipset': 'espressif', 'wps_quirk': 'esp_wps_bypass', 'timeout_base': 2.0},
+    'a4:cf:12': {'chipset': 'espressif', 'wps_quirk': 'esp_wps_bypass', 'timeout_base': 2.0},
+    'ac:67:b2': {'chipset': 'espressif', 'wps_quirk': 'esp_wps_bypass', 'timeout_base': 2.0},
+}
+CHIPSET_IDS = {
+    'unknown': 0, 'broadcom': 1, 'mediatek': 2, 'realtek': 3,
+    'atheros': 4, 'ralink': 5, 'marvell': 6, 'espressif': 7,
+}
+def fingerprint_chipset(bssid):
+    return CHIPSET_DB.get(bssid.lower()[:8], {'chipset': 'unknown', 'wps_quirk': 'none', 'timeout_base': 5.0})
+def chipset_id(name):
+    return CHIPSET_IDS.get(name.lower(), 0)
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ADVANCEMENT 2: Multi-Armed Bandit (UCB1) for Dynamic Delay Tuning
+# ═══════════════════════════════════════════════════════════════════════════
+class DelayBandit:
+    ARM_DELAYS = [0.1, 0.2, 0.5, 1.0, 2.0, 3.0, 5.0]
+    _DIR = os.path.join(os.path.expanduser('~'), '.OneShot-Extended')
+    _STATE_FILE = os.path.join(_DIR, 'delay_bandit.pkl')
+    def __init__(self):
+        n = len(self.ARM_DELAYS)
+        self.pulls = [0] * n
+        self.values = [0.0] * n
+        self.total_pulls = 0
+        self._load()
+    def _load(self):
+        try:
+            if os.path.exists(self._STATE_FILE):
+                import pickle
+                with open(self._STATE_FILE, 'rb') as f:
+                    d = pickle.load(f)
+                self.pulls = d.get('pulls', [0] * len(self.ARM_DELAYS))
+                self.values = d.get('values', [0.0] * len(self.ARM_DELAYS))
+                self.total_pulls = d.get('total', 0)
+        except Exception:
+            pass
+    def _save(self):
+        try:
+            os.makedirs(self._DIR, exist_ok=True)
+            import pickle
+            with open(self._STATE_FILE, 'wb') as f:
+                pickle.dump({'pulls': self.pulls, 'values': self.values, 'total': self.total_pulls}, f)
+        except Exception:
+            pass
+    def select_arm(self):
+        import math
+        for i in range(len(self.ARM_DELAYS)):
+            if self.pulls[i] == 0:
+                return self.ARM_DELAYS[i]
+        ucb_scores = []
+        for i in range(len(self.ARM_DELAYS)):
+            avg = self.values[i] / self.pulls[i]
+            conf = math.sqrt(2.0 * math.log(self.total_pulls + 1) / self.pulls[i])
+            ucb_scores.append(avg + conf)
+        return self.ARM_DELAYS[max(range(len(ucb_scores)), key=lambda i: ucb_scores[i])]
+    def update(self, delay, reward):
+        try:
+            idx = self.ARM_DELAYS.index(delay)
+        except ValueError:
+            idx = min(range(len(self.ARM_DELAYS)), key=lambda i: abs(self.ARM_DELAYS[i] - delay))
+        self.pulls[idx] += 1
+        self.values[idx] += reward
+        self.total_pulls += 1
+        if self.total_pulls % 10 == 0:
+            self._save()
+    def best_delay(self):
+        best_idx = max(range(len(self.ARM_DELAYS)),
+                       key=lambda i: (self.values[i] / self.pulls[i]) if self.pulls[i] > 0 else -999)
+        return self.ARM_DELAYS[best_idx]
+    def status(self):
+        parts = []
+        for i, d in enumerate(self.ARM_DELAYS):
+            if self.pulls[i] > 0:
+                parts.append(f'{d}s({self.pulls[i]}x,avg={self.values[i]/self.pulls[i]:.2f})')
+        return ', '.join(parts) if parts else 'untrained'
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ADVANCEMENT 4: Lightweight Deep Q-Network (pure numpy)
+# ═══════════════════════════════════════════════════════════════════════════
+class DQNetwork:
+    _DIR = os.path.join(os.path.expanduser('~'), '.OneShot-Extended')
+    _STATE_FILE = os.path.join(_DIR, 'dqn_state.pkl')
+    _BUFFER_MAX = 2000
+    _GAMMA = 0.95
+    _LR = 0.001
+    _EPSILON_START = 0.3
+    _EPSILON_MIN = 0.05
+    _EPSILON_DECAY = 0.995
+    _TARGET_UPDATE = 50
+    def __init__(self, state_dim, action_dim):
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.epsilon = self._EPSILON_START
+        self.train_step = 0
+        self.replay_buffer = []
+        self._init_weights()
+        self._load()
+    def _init_weights(self):
+        import numpy as np
+        rng = np.random.RandomState(42)
+        self.W1 = rng.randn(self.state_dim, 64) * np.sqrt(2.0 / self.state_dim); self.b1 = np.zeros(64)
+        self.W2 = rng.randn(64, 32) * np.sqrt(2.0 / 64); self.b2 = np.zeros(32)
+        self.W3 = rng.randn(32, self.action_dim) * np.sqrt(2.0 / 32); self.b3 = np.zeros(self.action_dim)
+        self.tW1, self.tb1 = self.W1.copy(), self.b1.copy()
+        self.tW2, self.tb2 = self.W2.copy(), self.b2.copy()
+        self.tW3, self.tb3 = self.W3.copy(), self.b3.copy()
+    def _forward(self, state, weights=None):
+        import numpy as np
+        if weights is None:
+            W1, b1, W2, b2, W3, b3 = self.W1, self.b1, self.W2, self.b2, self.W3, self.b3
+        else:
+            W1, b1, W2, b2, W3, b3 = weights
+        s = np.asarray(state, dtype=np.float64).flatten()
+        h1 = np.maximum(0, s @ W1 + b1)
+        h2 = np.maximum(0, h1 @ W2 + b2)
+        return h2 @ W3 + b3
+    def predict_q(self, state):
+        return self._forward(state).tolist()
+    def select_action(self, state):
+        import numpy as np
+        if np.random.random() < self.epsilon:
+            return np.random.randint(self.action_dim)
+        return int(np.argmax(self._forward(state)))
+    def remember(self, state, action, reward, next_state, done):
+        self.replay_buffer.append((state, action, reward, next_state, done))
+        if len(self.replay_buffer) > self._BUFFER_MAX:
+            self.replay_buffer.pop(0)
+    def replay(self, batch_size=32):
+        import numpy as np
+        if len(self.replay_buffer) < batch_size:
+            return
+        indices = np.random.choice(len(self.replay_buffer), batch_size, replace=False)
+        for state, action, reward, next_state, done in [self.replay_buffer[i] for i in indices]:
+            s = np.asarray(state, dtype=np.float64).flatten()
+            ns = np.asarray(next_state, dtype=np.float64).flatten()
+            q_next = self._forward(ns, weights=(self.tW1, self.tb1, self.tW2, self.tb2, self.tW3, self.tb3))
+            target = reward + (0 if done else self._GAMMA * np.max(q_next))
+            h1 = np.maximum(0, s @ self.W1 + self.b1)
+            h2 = np.maximum(0, h1 @ self.W2 + self.b2)
+            q_pred = h2 @ self.W3 + self.b3
+            error = np.zeros_like(q_pred)
+            error[action] = 2.0 * (q_pred[action] - target) / batch_size
+            dW3 = h2.reshape(-1, 1) @ error.reshape(1, -1)
+            db3 = error.copy()
+            dh2 = error @ self.W3.T * (h2 > 0).astype(float)
+            dW2 = h1.reshape(-1, 1) @ dh2.reshape(1, -1)
+            db2 = dh2.copy()
+            dh1 = dh2 @ self.W2.T * (h1 > 0).astype(float)
+            dW1 = s.reshape(-1, 1) @ dh1.reshape(1, -1)
+            db1 = dh1.copy()
+            self.W1 -= self._LR * dW1; self.b1 -= self._LR * db1
+            self.W2 -= self._LR * dW2; self.b2 -= self._LR * db2
+            self.W3 -= self._LR * dW3; self.b3 -= self._LR * db3
+        self.train_step += 1
+        self.epsilon = max(self._EPSILON_MIN, self.epsilon * self._EPSILON_DECAY)
+        if self.train_step % self._TARGET_UPDATE == 0:
+            self.tW1, self.tb1 = self.W1.copy(), self.b1.copy()
+            self.tW2, self.tb2 = self.W2.copy(), self.b2.copy()
+            self.tW3, self.tb3 = self.W3.copy(), self.b3.copy()
+    def _save(self):
+        try:
+            import pickle
+            os.makedirs(self._DIR, exist_ok=True)
+            with open(self._STATE_FILE, 'wb') as f:
+                pickle.dump({'W1': self.W1, 'b1': self.b1, 'W2': self.W2, 'b2': self.b2,
+                    'W3': self.W3, 'b3': self.b3, 'epsilon': self.epsilon,
+                    'train_step': self.train_step, 'buffer': self.replay_buffer[-500:]}, f)
+        except Exception:
+            pass
+    def _load(self):
+        try:
+            import pickle
+            if os.path.exists(self._STATE_FILE):
+                with open(self._STATE_FILE, 'rb') as f:
+                    d = pickle.load(f)
+                self.W1 = d['W1']; self.b1 = d['b1']
+                self.W2 = d['W2']; self.b2 = d['b2']
+                self.W3 = d['W3']; self.b3 = d['b3']
+                self.epsilon = d.get('epsilon', self._EPSILON_START)
+                self.train_step = d.get('train_step', 0)
+                self.replay_buffer = d.get('buffer', [])
+                self.tW1, self.tb1 = self.W1.copy(), self.b1.copy()
+                self.tW2, self.tb2 = self.W2.copy(), self.b2.copy()
+                self.tW3, self.tb3 = self.W3.copy(), self.b3.copy()
+        except Exception:
+            pass
+    def status(self):
+        return f'DQN(e={self.epsilon:.2f}, buf={len(self.replay_buffer)}, step={self.train_step})'
+
 class AIAgent:
     """Advanced ML agent for WPS attack optimization.
 
@@ -4666,6 +4881,7 @@ class AIAgent:
         'signal', 'wps_ver', 'wps_locked', 'is_vuln',
         'attempt', 'timeouts', 'resp_delay', 'm_msgs',
         'fails', 'sig_ok', 'oui', 'frame_loss', 'hist_locks',
+        'chip_id', 'channel_congestion', 'noise_floor',
     ]
 
     ACTIONS = ('proceed', 'wait', 'skip', 'abort')
@@ -4722,6 +4938,13 @@ class AIAgent:
             pass
 
         self._load()
+
+        # ADVANCEMENT 2: MAB delay bandit
+        self.delay_bandit = DelayBandit()
+        # ADVANCEMENT 4: Deep Q-Network
+        self.dqn = DQNetwork(state_dim=16, action_dim=len(self.ACTIONS))
+        # ADVANCEMENT 1: chipset cache
+        self._chipset_cache = {}
 
         if len(self.X) < 5:
             self._pretrain()
@@ -4862,6 +5085,12 @@ class AIAgent:
             meta['event_count'] = len(self.X)
             meta['training_commit'] = _git_commit() or meta.get('training_commit', '')
             write_metadata(meta)
+            # ADVANCEMENT 2+4: Save MAB and DQN state
+            try:
+                self.delay_bandit._save()
+                self.dqn._save()
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -4999,6 +5228,18 @@ class AIAgent:
         total    = timeouts + m_msgs
         frame_loss = timeouts / total if total > 0 else 0.0
 
+        # ADVANCEMENT 1: Chipset fingerprinting
+        bssid = ctx.get('bssid', '00:00:00:00:00:00')
+        if bssid not in self._chipset_cache:
+            self._chipset_cache[bssid] = fingerprint_chipset(bssid)
+        chip = self._chipset_cache[bssid]
+        chip_id_val = chipset_id(chip.get('chipset', 'unknown'))
+
+        # ADVANCEMENT 3: Channel congestion & noise floor (from ctx or estimated)
+        channel_congestion = min(max(ctx.get('channel_congestion', 0.0), 0.0), 1.0)
+        noise_floor = min(max(ctx.get('noise_floor', -90.0), -100.0), 0.0)
+        noise_norm = (noise_floor + 100.0) / 100.0  # normalize -100..0 → 0..1
+
         return [
             self._norm_signal(ctx.get('signal', -50)),            # 0  signal
             1.0 if str(ctx.get('wps_version', '1.0')) == '2.0' else 0.0,  # 1  wps_ver
@@ -5013,6 +5254,9 @@ class AIAgent:
             self._oui_hash(ctx.get('bssid', '00:00:00:00:00:00')),# 10 oui
             frame_loss,                                            # 11 frame_loss
             min(ctx.get('hist_locks', 0), 10) / 10.0,            # 12 hist_locks
+            chip_id_val / 7.0,                                     # 13 chip_id
+            channel_congestion,                                    # 14 channel_congestion
+            noise_norm,                                            # 15 noise_floor
         ]
 
     # ------------------------------------------------------------------
@@ -5099,13 +5343,24 @@ class AIAgent:
                 except Exception:
                     pass
 
-            # Vote 3: Q-Learning table (weight 0.3)
+            # Vote 3: Q-Learning table (weight 0.15)
             state  = self._discretize(ctx)
             q_best = self._q_best(state)
             if q_best is not None:
                 q_val = self.q_table[state][q_best]
                 if q_val > 0:
-                    votes[q_best] = votes.get(q_best, 0) + 0.3
+                    votes[q_best] = votes.get(q_best, 0) + 0.15
+
+            # Vote 4: Deep Q-Network (weight 0.30)
+            try:
+                feat = self.extract(ctx)
+                q_vals = self.dqn.predict_q(feat)
+                dqn_action_idx = int(max(range(len(q_vals)), key=lambda i: q_vals[i]))
+                dqn_action = self.ACTIONS[dqn_action_idx]
+                if q_vals[dqn_action_idx] > 0:
+                    votes[dqn_action] = votes.get(dqn_action, 0) + 0.30
+            except Exception:
+                pass
 
             if votes:
                 return max(votes, key=votes.get)
@@ -5183,6 +5438,24 @@ class AIAgent:
         # SGD online partial_fit
         self._online_fit(feat, 'proceed' if success else 'skip')
 
+        # ADVANCEMENT 4: Train DQN with experience
+        try:
+            action_idx = self.ACTIONS.index(action) if action in self.ACTIONS else 0
+            self.dqn.remember(feat, action_idx, reward, feat, success)
+            self.dqn.replay(batch_size=min(32, max(1, len(self.dqn.replay_buffer))))
+            if len(self.dqn.replay_buffer) % 50 == 0 and len(self.dqn.replay_buffer) > 0:
+                self.dqn._save()
+        except Exception:
+            pass
+
+        # ADVANCEMENT 2: Update MAB delay bandit
+        try:
+            delay_used = ctx.get('resp_delay', 1.0)
+            mab_reward = 1.0 if success else (-0.5 if ctx.get('wps_locked', False) else 0.0)
+            self.delay_bandit.update(delay_used, mab_reward)
+        except Exception:
+            pass
+
         # Keep dataset bounded (larger buffer now)
         if len(self.X) > self._MAX_OBS:
             self.X, self.y = self.X[-self._MAX_OBS:], self.y[-self._MAX_OBS:]
@@ -5198,16 +5471,28 @@ class AIAgent:
     # ------------------------------------------------------------------
 
     def predict_timeout(self, base: float, ctx: dict) -> float:
-        """Adjust timeout based on signal and history."""
+        """Adjust timeout using MAB bandit + chipset profiling + signal."""
         signal   = ctx.get('signal', -50)
         timeouts = ctx.get('timeouts', 0)
+
+        # ADVANCEMENT 2: Use MAB to pick optimal delay
+        mab_delay = self.delay_bandit.select_arm()
+
+        # ADVANCEMENT 1: Use chipset-specific timeout base
+        bssid = ctx.get('bssid', '00:00:00:00:00:00')
+        if bssid not in self._chipset_cache:
+            self._chipset_cache[bssid] = fingerprint_chipset(bssid)
+        chip_timeout = self._chipset_cache[bssid].get('timeout_base', base)
+
+        # Combine MAB, chipset, and signal-based adjustments
+        adjusted = chip_timeout * mab_delay
         if signal < -80:
-            return base * 1.5
+            adjusted *= 1.5
         if signal > -50 and timeouts == 0:
-            return base * 0.7
+            adjusted *= 0.7
         if timeouts >= 2:
-            return base * 0.5
-        return base
+            adjusted *= 0.5
+        return max(0.1, min(30.0, adjusted))
 
     def status(self) -> str:
         parts = []
@@ -5217,6 +5502,8 @@ class AIAgent:
             parts.append('SGD')
         if self.q_table:
             parts.append(f'Q({len(self.q_table)})')
+        parts.append(f'DQN(buf={len(self.dqn.replay_buffer)})')
+        parts.append(f'MAB({self.delay_bandit.total_pulls} pulls)')
         if not parts:
             parts.append('heuristic')
         return f'AI Agent ready ({", ".join(parts)}, {len(self.X)} obs)'

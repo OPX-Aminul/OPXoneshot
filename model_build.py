@@ -195,6 +195,10 @@ def main():
             float(r.get('attempt', 1)),
             float(r.get('m_msgs', 3 if r.get('success') else 0)),
             float(r.get('fails', 0 if r.get('success') else 1)),
+            # ADVANCEMENT 3: Expanded features (with safe defaults)
+            float(r.get('chip_id', 0)) / 7.0,
+            float(r.get('channel_congestion', 0.0)),
+            (float(r.get('noise_floor', -90.0)) + 100.0) / 100.0,
         ]
         X.append(feat)
         y.append('proceed' if r.get('success') else 'skip')
@@ -207,7 +211,7 @@ def main():
     ya = np.array(y)
 
     from sklearn.ensemble import RandomForestClassifier
-    rf = RandomForestClassifier(n_estimators=100, max_depth=10,
+    rf = RandomForestClassifier(n_estimators=150, max_depth=12,
                                 min_samples_leaf=2, n_jobs=-1)
     rf.fit(Xa, ya)
 
