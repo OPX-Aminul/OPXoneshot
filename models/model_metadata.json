@@ -1,15 +1,35 @@
 {
-  "model_version": "v2.0.0",
-  "feature_version": "v1",
-  "dataset_version": "d2000",
-  "event_count": 1035,
-  "cross_val_accuracy": 0.0,
-  "trained_at": "2026-08-27T19:21:08Z",
-  "training_mode": "smart_retrain_v2",
-  "class_balance": {
-    "proceed": 270,
-    "wait": 150,
-    "skip": 435,
-    "abort": 180
-  }
+  "model_version": "v5.0.0-final",
+  "feature_version": "v2",
+  "dataset_version": "d200000",
+  "event_count": 250000,
+  "cross_val_accuracy": 0.8378,
+  "training_mode": "massive_v5_final",
+  "trained_at": "2026-08-27T19:56:45Z",
+  "advancements": {
+    "chipset_fingerprinting": true,
+    "mab_delay_tuning": true,
+    "dqn_neural_rl": true,
+    "expanded_features": "16",
+    "adaptive_evasion": true,
+    "zero_day_hunter": true,
+    "dynamic_pacing": true,
+    "cognitive_reasoning": true,
+    "nlp_cve_parser": true,
+    "resilience_manager": true,
+    "mathematical_reasoning": true,
+    "code_intelligence": true,
+    "error_interpreter": true
+  },
+  "chipset_entries": 220,
+  "vuln_db_entries": 8,
+  "ensemble_weights": {
+    "rf": 0.3,
+    "sgd": 0.25,
+    "q_table": 0.15,
+    "dqn": 0.3
+  },
+  "q_table_states": 3735,
+  "rf_trees": 250,
+  "rf_depth": 18
 }
