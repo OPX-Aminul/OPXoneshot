@@ -106,6 +106,18 @@ sudo python3 oneshot.py --install
 
 ### Community Model / Training Data
 
+Every time you run `wifi4` (or `oneshot.py`), the AI **automatically**:
+
+1. **Learns the newest shared model** from GitHub (`git fetch` + checkout latest `models/`)
+2. **Pushes your fresh attack data** to the Supabase community store
+3. **Pulls only the new community rows** since your last sync and learns them in ~1 second (incremental SGD — no full model download)
+
+No flags, no user action. New users who clone the repo immediately get the latest trained model.
+
+Background (throttled every 30 min): the model is fully retrained on the merged community data and pushed back to GitHub automatically (once per day).
+
+Explicit commands still available:
+
 ```bash
 # Export your training data (share on GitHub so others learn from it)
 python3 oneshot.py --export
@@ -125,10 +137,17 @@ python3 oneshot.py --ai --profile balanced     # default
 python3 oneshot.py --ai --profile aggressive
 ```
 
-Every user's `record()` calls are saved to `~/.OneShot-Extended/training_log.json`
-with a unique user id. Share your `--export` file and merge others' data with
-`--import-data` so the model improves from everyone's experience.
+Supabase community sync:
+
+```bash
+python3 oneshot.py --sync          # push local -> pull community -> retrain -> git push
+python3 oneshot.py --push-data     # only upload local training log
+python3 oneshot.py --pull-data     # only download new community rows
 ```
+
+Every user's `record()` calls are saved to `~/.OneShot-Extended/training_log.json`
+with a unique user id. Data flows to the shared Supabase table + GitHub model
+so everyone's model improves from everyone's experience.
 
 ---
 

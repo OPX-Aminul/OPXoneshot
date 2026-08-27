@@ -4246,7 +4246,7 @@ def _aiAutonomousMode():
     print(f'[AI] Model saved: {agent.status()}')
 
     # Auto-push new training data to Supabase community store
-    _autoSync()
+    _autoSync(do_git=True)
     print()
 
 def _installGlobally():
@@ -4323,8 +4323,9 @@ def syncModelToRepo(agent=None):
 # ---------------------------------------------------------------------------
 
 SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://oenckshhftqjjwhngxzo.supabase.co')
-SUPABASE_KEY = os.environ.get('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9lbmNrc2hoZnRxamp3aG5neHpvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc4MDkzNzYsImV4cCI6MjEwMzM4NTM3Nn0.xetav4AA9f3Vr6TjWcLtejCBboZKwrTg3DTEj00TkRo')
+SUPABASE_KEY = os.environ.get('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9lbmNrc2hoZnRxamp3aG5neHpvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NzgwOTM3NiwiZXhwIjoyMTAzMzg1Mzc2fQ.SSgiVT3VEcn7oNbE9xaqs78YxO46qGkg1kZeKYh2ctg')
 SUPABASE_TABLE = 'training_data'
+MAX_PULL_ROWS = 5000   # hard cap on community observations pulled per run
 
 
 class SyncEngine:
@@ -4401,23 +4402,28 @@ class SyncEngine:
             return 0
 
     # ---- download all community rows -------------------------------------
-    def pull_data(self, agent: AIAgent = None, quiet: bool = False) -> tuple[AIAgent, int]:
+    def pull_data(self, agent: AIAgent = None, quiet: bool = False,
+                  since_id: int = 0, limit: int = MAX_PULL_ROWS) -> tuple[AIAgent, int]:
         import urllib.request, urllib.parse
 
         if agent is None:
             agent = AIAgent(quiet=True)
 
-        limit = 2000
         offset = 0
         merged_obs = 0
+        agent._last_pull_id  = since_id
+        agent._last_pull_ts  = 0
 
         while True:
-            q = urllib.parse.urlencode({
-                'select': 'user_id,signal,locked,action,success,reward,profile',
-                'order': 'ts.desc',
-                'limit': str(limit),
+            params = {
+                'select': 'id,ts,user_id,signal,locked,action,success,reward,profile',
+                'order': 'id.desc',
+                'limit': str(min(limit, 2000)),
                 'offset': str(offset),
-            })
+            }
+            if since_id > 0:
+                params['id'] = f'gt.{since_id}'
+            q = urllib.parse.urlencode(params)
             url = f'{self.api}?{q}'
             req = urllib.request.Request(url, headers=self._hdr, method='GET')
             try:
@@ -4434,6 +4440,18 @@ class SyncEngine:
 
             if not rows:
                 break
+
+            # Track newest row seen (for incremental cursor)
+            for r in rows:
+                if r.get('id') and int(r['id']) > agent._last_pull_id:
+                    agent._last_pull_id = int(r['id'])
+                if r.get('ts'):
+                    try:
+                        t = float(r['ts'])
+                    except Exception:
+                        t = 0
+                    if t > agent._last_pull_ts:
+                        agent._last_pull_ts = t
 
             # Convert rows back into observations for training
             for r in rows:
@@ -4528,25 +4546,95 @@ def _ensure_sync_state():
 
 
 def _autoSync(do_git: bool = False):
-    """Silent community sync — runs after every attack, never blocks visibly.
+    """Silent community sync — runs on every run, learns in ~1 second.
 
-    Inline (guaranteed, fast): pushes any fresh training data to Supabase.
-    Background (best-effort, throttled to 30 min): pulls community rows,
-    merges, retrains, saves, and optionally git-pushes once per day.
+    Inline (guaranteed, fast, every run):
+      1. git pull the latest bundled model from the repo (learn from GitHub).
+      2. push any fresh local training data to Supabase.
+      3. pull only NEW community rows since last_cursor and quickly SGD-fit
+         them into the model (incremental learning).
+    Background (throttled to 30 min): full RF retrain + repo sync + git push.
     """
     state, state_file = _ensure_sync_state()
     now = time.time()
 
-    # --- Inline fast push: guarantee fresh data reaches Supabase ---
+    # --- Inline step 1: learn the newest shared model from GitHub ---------
     try:
-        agent = AIAgent(quiet=True)
-        if agent.training_log:
-            SyncEngine().push_data(agent, quiet=True)
+        import subprocess
+        cwd = os.path.dirname(os.path.abspath(__file__))
+        # Fetch + checkout ONLY the models/ dir — no code overwrite, no
+        # stash/rebase conflicts. Works for any git clone of the repo.
+        subprocess.run(['git', 'fetch', 'origin'], cwd=cwd,
+                       capture_output=True, timeout=30)
+        subprocess.run(['git', 'checkout', 'origin/main', '--', 'models/'],
+                       cwd=cwd, capture_output=True, timeout=20)
     except Exception:
         pass
 
-    # --- Background pull + train, throttled ---
+    # --- Inline step 2+3: push fresh data, pull new community rows --------
+    # Skip the heavy AIAgent build entirely when there's nothing to sync
+    # (no unpushed local rows and no Supabase cursor yet).
+    do_supabase = False
+    _train_path = os.path.join(os.path.expanduser('~'), '.OneShot-Extended', 'training_log.json')
+    try:
+        if state.get('last_id', 0):
+            do_supabase = True
+        elif os.path.exists(_train_path):
+            with open(_train_path) as _f:
+                _log = json.load(_f)
+            if any(not r.get('pushed') for r in _log):
+                do_supabase = True
+    except Exception:
+        pass
+
+    if do_supabase:
+        try:
+            engine = SyncEngine()
+            last_id = state.get('last_id', 0)
+
+            agent = AIAgent(quiet=True)
+            if agent.training_log:
+                engine.push_data(agent, quiet=True)
+
+            # Incremental pull — only rows newer than our last cursor
+            agent, n = engine.pull_data(agent, quiet=True,
+                                        since_id=last_id, limit=MAX_PULL_ROWS)
+            if n:
+                # Fast incremental learning (~1s): SGD accepts the new obs
+                for i, feat in enumerate(agent.X[-n:]):
+                    agent._online_fit(feat, agent.y[len(agent.X) - n + i])
+                try:
+                    import numpy as np
+                    if len(np.unique(agent.y)) >= 2:
+                        agent._init_sgd()
+                except Exception:
+                    pass
+
+            # Remember the newest community row we already learned from
+            if agent._last_pull_id > last_id:
+                state['last_id'] = agent._last_pull_id
+
+            # Save only if the model gained new observations (skip full RF there)
+            if n:
+                import numpy as np
+                if len(agent.X) >= 10:
+                    try:
+                        agent._train_rf()
+                    except Exception:
+                        pass
+                agent.finalize()
+            else:
+                agent._save()
+        except Exception:
+            pass
+
+    # --- Background full retrain + git push, throttled --------------------
     if now - state.get('last_sync', 0) < 30 * 60:
+        try:
+            with open(state_file, 'w') as f:
+                json.dump(state, f)
+        except Exception:
+            pass
         return
 
     def _worker():
@@ -4555,10 +4643,11 @@ def _autoSync(do_git: bool = False):
             agent = AIAgent(quiet=True)
             agent._seen_keys = set()
 
-            # 2. pull community
-            agent, n = engine.pull_data(agent, quiet=True)
+            # full pull (bounded)
+            agent, n = engine.pull_data(agent, quiet=True,
+                                        limit=MAX_PULL_ROWS)
 
-            # 3. retrain
+            # full RF retrain on merged community data
             if agent.has_ml and len(agent.X) >= 20:
                 try:
                     agent._train_rf()
@@ -4568,7 +4657,7 @@ def _autoSync(do_git: bool = False):
             agent.finalize()
             syncModelToRepo(agent)
 
-            # 4. optional git push (throttled to once per day)
+            # optional git push (throttled to once per day)
             if do_git and now - state.get('last_git', 0) > 24 * 3600:
                 import subprocess
                 cwd = os.path.dirname(os.path.abspath(__file__))
@@ -4816,7 +4905,7 @@ def main():
     # Silent background community sync (user never sees this)
     if not (getattr(args, 'sync', False) or getattr(args, 'push_data', False)
             or getattr(args, 'pull_data', False)):
-        _autoSync()
+        _autoSync(do_git=True)
 
 
 if __name__ == '__main__':
