@@ -1,0 +1,15 @@
+{
+  "model_version": "v2.0.0",
+  "feature_version": "v1",
+  "dataset_version": "d2000",
+  "event_count": 780,
+  "cross_val_accuracy": 0.0,
+  "trained_at": "2026-08-27T15:19:16Z",
+  "training_mode": "smart_retrain_v2",
+  "class_balance": {
+    "proceed": 270,
+    "wait": 150,
+    "skip": 180,
+    "abort": 180
+  }
+}
