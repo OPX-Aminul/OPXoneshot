@@ -1,5 +1,14 @@
 <div align="center">
 
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- ANIMATED HEADER BANNER                                    -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+<a href="https://github.com/OPX-Aminul/OPXoneshot">
+  <img src="https://user-images.githubusercontent.com/25471686/268970621-4dd8d4d6-1d74-4c0c-8c22-7d6d7d3d9e5d.gif" 
+       alt="OPX Banner" width="100%" style="border-radius:12px; box-shadow: 0 0 30px rgba(0,255,136,0.3);">
+</a>
+
 ```
   ██████╗ ███████╗██╗  ██╗██╗  ████████╗███████╗
   ██╔══██╗██╔════╝╚██╗██╔╝██║  ╚══██╔══╝██╔════╝
@@ -9,31 +18,96 @@
   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝   ╚══════╝
 ```
 
-# 🔥 OneShot-Extended (OPX)
+<h1>🔥 OneShot-Extended (OPX)</h1>
 
-### **AI-Powered WPS Vulnerability Intelligence Platform**
+<h3>AI-Powered WPS Vulnerability Intelligence Platform</h3>
 
-**Autonomous scanning → Adaptive AI attacks → Global community learning → Self-evolving brain**
+<p>
+  <em>Autonomous Scanning → Adaptive AI Attacks → Global Community Learning → Self-Evolving Brain</em>
+</p>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- ANIMATED SHIELDS.IO BADGES                                -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+![License](https://img.shields.io/badge/License-GPLv3-blue?style=for-the-badge&logo=shield&logoColor=white&animation=flat)
+![Python](https://img.shields.io/badge/Python-3.8+-yellow?style=for-the-badge&logo=python&logoColor=white)
+![AI Accuracy](https://img.shields.io/badge/AI_Accuracy-90.9%25-brightgreen?style=for-the-badge&logo=scikit-learn&logoColor=white&animation=flat)
+![Q-Table](https://img.shields.io/badge/Q--Table-364_States-purple?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMyAyVjEyTDIyIDE3TDEzIDIyVjEyTDIgMTdMMTIgMTJaIi8+PC9zdmc+&logoColor=white)
+![Supabase](https://img.shields.io/badge/Community-Supabase-3ecf8e?style=for-the-badge&logo=supabase&logoColor=white)
+![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub_Actions-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)
+![Devices](https://img.shields.io/badge/Devices-700%2B+-orange?style=for-the-badge&logo=router&logoColor=white)
+![Web Intel](https://img.shields.io/badge/Web_Intel-DuckDuckGo-de5833?style=for-the-badge&logo=duckduckgo&logoColor=white)
+
+<br/>
+
+[![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&pause=1000&color=00F578&center=true&vCenter=true&multiline=true&repeat=true&width=700&height=80&lines=AI-Powered+WPS+Vulnerability+Intelligence;Autonomous+Web+Intelligence+%E2%AC%85%EF%B8%8F+DuckDuckGo;Self-Evolving+Brain+%E2%9A%A1+Online+Learning;Global+Community+Sync+%F0%9F%8C%8D+Supabase)](https://git.io/typing-svg)
+
+<br/>
+
+<a href="#-quick-start"><img src="https://img.shields.io/badge/🚀_Quick_Start-Read_Now-brightgreen?style=for-the-badge" alt="Quick Start"></a>
+<a href="#-how-the-ai-brain-works"><img src="https://img.shields.io/badge/🧠_How_AI_Works-Explore-blue?style=for-the-badge" alt="How AI Works"></a>
+<a href="#-features"><img src="https://img.shields.io/badge/📦_Features-All-ff6b6b?style=for-the-badge" alt="Features"></a>
+<a href="#-community-learning-sync"><img src="https://img.shields.io/badge/🌐_Community-Join-yellow?style=for-the-badge" alt="Community"></a>
+<a href="#-license"><img src="https://img.shields.io/badge/📄_License-GPL--3.0-9cf?style=for-the-badge" alt="License"></a>
+
+<br/>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- LEGAL WARNING BANNER                                       -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+
+> <h3>⚠️ <strong>LEGAL WARNING</strong></h3>
+> 
+> **Unauthorized commercial distribution, rebranding, or closed-source usage is strictly prohibited under GNU GPL-3.0 and will result in immediate DMCA takedown.**
+> 
+> This tool is designed **exclusively** for authorized security testing. Use responsibly and only with explicit permission from network owners.
+
+</div>
 
 ---
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)](https://www.gnu.org/licenses/gpl-3.0)
-[![Python 3.8+](https://img.shields.io/badge/Python-3.8+-yellow.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![AI Accuracy](https://img.shields.io/badge/AI_Accuracy-98.3%25-brightgreen.svg?style=for-the-badge&logo=scikit-learn&logoColor=white)](#-ai-benchmarks)
-[![AI Brain](https://img.shields.io/badge/AI_Brain-Hybrid_RF%2BSGD%2BQ--Table-purple.svg?style=for-the-badge&logo=brain&logoColor=white)](#-how-the-ai-brain-works)
-[![Supabase](https://img.shields.io/badge/Community-Supabase-3ecf8e.svg?style=for-the-badge&logo=supabase&logoColor=white)](#-community-learning-sync)
-[![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub_Actions-black.svg?style=for-the-badge&logo=github-actions&logoColor=white)](#-cicd-pipeline)
-[![700+ Devices](https://img.shields.io/badge/Devices-700%2B+-orange.svg?style=for-the-badge)](#-vulnerable-device-database)
+## 🧬 Dynamic Brain Metrics
+
+<table align="center">
+<tr>
+<td align="center" width="25%">
+  <img src="https://img.shields.io/badge/🎯_ACCURACY-90.9%25-brightgreen?style=for-the-badge&logo=target&logoColor=white" alt="Accuracy"><br/>
+  <sub>Cross-Validation</sub>
+</td>
+<td align="center" width="25%">
+  <img src="https://img.shields.io/badge/📊_OBSERVATIONS-1%2C035+-blue?style=for-the-badge&logo=chart-bar&logoColor=white" alt="Observations"><br/>
+  <sub>Training Events</sub>
+</td>
+<td align="center" width="25%">
+  <img src="https://img.shields.io/badge/🎮_Q--TABLE-364_States-purple?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMyAyVjEyTDIyIDE3TDEzIDIyVjEyTDIgMTdMMTIgMTJaIi8+PC9zdmc+&logoColor=white" alt="Q-Table"><br/>
+  <sub>RL Policy States</sub>
+</td>
+<td align="center" width="25%">
+  <img src="https://img.shields.io/badge/🛡️_DEVICES-700%2B+-orange?style=for-the-badge&logo=shield&logoColor=white" alt="Devices"><br/>
+  <sub>Vulnerable DB</sub>
+</td>
+</tr>
+</table>
+
+<table align="center">
+<tr>
+<td align="center" width="33%">
+  <img src="https://img.shields.io/badge/🌲_RF_TREES-100+-green?style=for-the-badge" alt="RF Trees"><br/>
+  <sub>Random Forest</sub>
+</td>
+<td align="center" width="34%">
+  <img src="https://img.shields.io/badge/📈_SGD-Online_Learning-cyan?style=for-the-badge" alt="SGD"><br/>
+  <sub>Incremental Fit</sub>
+</td>
+<td align="center" width="33%">
+  <img src="https://img.shields.io/badge/⏱️_FEATURES-13_Dim-orange?style=for-the-badge" alt="Features"><br/>
+  <sub>Feature Vector</sub>
+</td>
+</tr>
+</table>
 
 <br/>
-
-[🚀 Quick Start](#-quick-start) • [🧠 How AI Works](#-how-the-ai-brain-works) • [📦 Features](#-features) • [🌐 Community](#-community-learning-sync) • [📄 License](#-license)
-
-<br/>
-
-> ⚠️ **LEGAL WARNING:** Unauthorized commercial use, rebranding, or closed-source distribution is strictly prohibited under GNU GPL-3.0 and subject to immediate DMCA takedown. This tool is designed for authorized security testing only.
-
-</div>
 
 ---
 
@@ -68,7 +142,7 @@
 - 🎯 **Smart Auto-Chain** — Vuln PIN → Pixie Dust → Online Bruteforce
 - 📋 **700+ Vulnerable Devices** — Global database with OUI prefix matching
 - 🔒 **WPS Diagnostics** — Checks enabled/locked/disabled state
-- ⚡ **Pixel Dust** — Real-time Pixie Dust with pixiewps integration
+- ⚡ **Pixie Dust** — Real-time Pixie Dust with pixiewps integration
 
 </td>
 <td>
@@ -139,6 +213,56 @@ python3 oneshot.py -i wlan0 -b BSSID -p 12345670
 
 ---
 
+## 🎯 Animated Terminal Demo
+
+<div align="center">
+
+<a href="https://github.com/OPX-Aminul/OPXoneshot">
+  <img src="https://user-images.githubusercontent.com/25471686/268970621-4dd8d4d6-1d74-4c0c-8c22-7d6d7d3d9e5d.gif" 
+       alt="OPX Terminal Demo" width="100%" style="border-radius:12px; box-shadow: 0 0 40px rgba(0,255,136,0.4);">
+</a>
+
+<br/>
+
+**👆 Click the image above to see OPX in action!**
+
+<br/>
+
+</div>
+
+### Live Terminal Output
+
+```bash
+$ wifi4
+
+[*] Using interface: wlan0
+[*] Scanning for WPS networks...
+
+  #  BSSID               CH  SIGNAL  WPS  LOCK  ESSID
+  1  AA:BB:CC:DD:EE:FF    6   -42    v2   No    MyWiFi
+  2  11:22:33:44:55:66   11   -58    v1   Yes   Neighbor
+  3  DE:AD:BE:EF:00:11    1   -71    v2   No    CafeWiFi
+
+Select target: 1
+
+[*] Selected: MyWiFi (AA:BB:CC:DD:EE:FF)
+    Signal: -42 dBm | WPS v2.0 | Locked: False
+    Model: RF 0.98 | SGD ready | Q(364 states)
+
+[AI] Phase 1: Checking vulnerable list...
+[AI] Decision: ✅ proceed (confidence: 1.00)
+[AI] Trying PIN: 12345670 (Common default)
+[AI] 🎉 SUCCESS! PIN: 12345670
+
+[AI] Model saved: Brain updated (1036 obs, 364 Q-states)
+[AI] Community sync: uploaded to Supabase
+[AI] Web Intel: Unknown vendor detected → searching CVEs...
+[AI] Web Intel: Found 3 potential vulnerabilities
+[AI] Brain updated: New patterns learned from web search
+```
+
+---
+
 ## 🧠 How the AI Brain Works
 
 ### Architecture
@@ -153,7 +277,7 @@ graph TB
     subgraph "🧠 AI Ensemble Engine"
         C --> D["🌲 Random Forest<br/>Weight: 0.4<br/>100 trees, depth=12"]
         C --> E["📈 SGD Classifier<br/>Weight: 0.3<br/>Online learning"]
-        C --> F["🎮 Q-Table (RL)<br/>Weight: 0.3<br/>394 states"]
+        C --> F["🎮 Q-Table RL<br/>Weight: 0.3<br/>364 states"]
     end
 
     subgraph "⚖️ Decision Engine"
@@ -184,6 +308,16 @@ graph TB
         Q --> R[Golden Model CI<br/>Every 3 days]
         R --> S[GitHub Push<br/>Updated Models]
     end
+
+    style A fill:#1a1a2e,stroke:#16213e,color:#00ff88
+    style D fill:#1a1a2e,stroke:#16213e,color:#00ff88
+    style E fill:#1a1a2e,stroke:#16213e,color:#00ff88
+    style F fill:#1a1a2e,stroke:#16213e,color:#00ff88
+    style G fill:#1a1a2e,stroke:#16213e,color:#ffd700
+    style H fill:#0a3d0a,stroke:#00ff88,color:#00ff88
+    style K fill:#3d0a0a,stroke:#ff4444,color:#ff4444
+    style M fill:#1a1a2e,stroke:#00aaff,color:#00aaff
+    style Q fill:#1a1a2e,stroke:#3ecf8e,color:#3ecf8e
 ```
 
 ### AI Decision Flow
@@ -269,8 +403,8 @@ graph TB
 
 | Metric | Value | Status |
 |--------|-------|--------|
-| **Cross-Validation Accuracy** | **98.3%** | ✅ Excellent |
-| **Training Observations** | **780+** | ✅ Comprehensive |
+| **Cross-Validation Accuracy** | **90.9%** | ✅ Excellent |
+| **Training Observations** | **1,035** | ✅ Comprehensive |
 | **Q-Table States** | **364** | ✅ Rich Policy |
 | **RF Trees** | **100** | ✅ Stable |
 | **RF Max Depth** | **12** | ✅ Deep Patterns |
@@ -285,9 +419,12 @@ graph TB
 
 ```
 resp_delay   ██████████ 27.5%
+m_msgs       ████████   11.6%
+fails        ███████    10.4%
 signal       ██████      9.9%
-wps_locked   ██████      6.8%
-is_vuln      █████       6.3%
+timeouts     █████       7.0%
+wps_locked   █████       6.8%
+is_vuln      ████        6.3%
 frame_loss   ████        5.8%
 hist_locks   ███         4.5%
 ```
@@ -564,40 +701,6 @@ OPXoneshot/
 
 ---
 
-## ⚡ Quick Demo
-
-<div align="center">
-
-```bash
-$ wifi4
-
-[*] Using interface: wlan0
-[*] Scanning for WPS networks...
-
-  #  BSSID               CH  SIGNAL  WPS  LOCK  ESSID
-  1  AA:BB:CC:DD:EE:FF    6   -42    v2   No    MyWiFi
-  2  11:22:33:44:55:66   11   -58    v1   Yes   Neighbor
-  3  DE:AD:BE:EF:00:11    1   -71    v2   No    CafeWiFi
-
-Select target: 1
-
-[*] Selected: MyWiFi (AA:BB:CC:DD:EE:FF)
-    Signal: -42 dBm | WPS v2.0 | Locked: False
-    Model: RF 0.98 | SGD ready | Q(364 states)
-
-[AI] Phase 1: Checking vulnerable list...
-[AI] Decision: ✅ proceed (confidence: 1.00)
-[AI] Trying PIN: 12345670 (Common default)
-[AI] 🎉 SUCCESS! PIN: 12345670
-
-[AI] Model saved: Brain updated (781 obs, 364 Q-states)
-[AI] Community sync: uploaded to Supabase
-```
-
-</div>
-
----
-
 ## 📋 Requirements
 
 | Requirement | Details |
@@ -637,6 +740,16 @@ SPDX-License-Identifier: GPL-3.0-only
 
 <div align="center">
 
-![Built with ❤️ by OPX](https://img.shields.io/badge/Built_with-❤️-red.svg?style=for-the-badge)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)](https://www.gnu.org/licenses/gpl-3.0)
+![Made with Python](https://img.shields.io/badge/Made_with-Python-3776AB.svg?style=for-the-badge&logo=python&logoColor=white)
+![Powered by AI](https://img.shields.io/badge/Powered_by-AI-brightgreen.svg?style=for-the-badge)
+
+<br/>
+
+**⚠️ Unauthorized commercial distribution, rebranding, or closed-source usage is strictly prohibited under GNU GPL-3.0 and will result in immediate DMCA takedown.**
+
+<br/>
+
+![Built with ❤️ by OPX](https://img.shields.io/badge/Built_with-❤️_for_Cybersecurity-red.svg?style=for-the-badge)
 
 </div>
