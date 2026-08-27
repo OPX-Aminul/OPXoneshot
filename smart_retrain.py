@@ -212,6 +212,69 @@ SKIP_SCENARIOS = [
      'attempt': 8, 'timeouts': 4, 'm_msgs': 1, 'resp_delay': 8.0, 'fails': 6, 'hist_locks': 0},
     {'signal': -55, 'wps_ver': '2.0', 'wps_locked': False, 'is_vuln': False,
      'attempt': 10, 'timeouts': 5, 'm_msgs': 0, 'resp_delay': 10.0, 'fails': 7, 'hist_locks': 0},
+
+    # ── NEW: ISP router scenarios (BT/Sky/TalkTalk/EE) ──
+    # ISP routers often have weak WPS implementations
+    {'signal': -42, 'wps_ver': '1.0', 'wps_locked': False, 'is_vuln': True,
+     'attempt': 1, 'timeouts': 0, 'resp_delay': 0.5, 'm_msgs': 5, 'fails': 0, 'hist_locks': 0},
+    {'signal': -48, 'wps_ver': '1.0', 'wps_locked': False, 'is_vuln': True,
+     'attempt': 2, 'timeouts': 0, 'resp_delay': 1.0, 'm_msgs': 4, 'fails': 0, 'hist_locks': 0},
+
+    # ── NEW: Xiaomi/Redmi router scenarios ──
+    {'signal': -38, 'wps_ver': '2.0', 'wps_locked': False, 'is_vuln': True,
+     'attempt': 1, 'timeouts': 0, 'resp_delay': 0.8, 'm_msgs': 4, 'fails': 0, 'hist_locks': 0},
+    {'signal': -52, 'wps_ver': '2.0', 'wps_locked': False, 'is_vuln': True,
+     'attempt': 2, 'timeouts': 1, 'resp_delay': 2.0, 'm_msgs': 3, 'fails': 1, 'hist_locks': 0},
+
+    # ── NEW: Keenetic router scenarios ──
+    {'signal': -44, 'wps_ver': '2.0', 'wps_locked': False, 'is_vuln': True,
+     'attempt': 1, 'timeouts': 0, 'resp_delay': 0.6, 'm_msgs': 4, 'fails': 0, 'hist_locks': 0},
+
+    # ── NEW: Tenda router scenarios ──
+    {'signal': -46, 'wps_ver': '1.0', 'wps_locked': False, 'is_vuln': True,
+     'attempt': 1, 'timeouts': 0, 'resp_delay': 1.2, 'm_msgs': 3, 'fails': 0, 'hist_locks': 0},
+
+    # ── NEW: MediaTek chipset pixie-dust fast recovery ──
+    {'signal': -50, 'wps_ver': '2.0', 'wps_locked': False, 'is_vuln': True,
+     'attempt': 1, 'timeouts': 0, 'resp_delay': 0.3, 'm_msgs': 6, 'fails': 0, 'hist_locks': 0},
+
+    # ── NEW: Realtek chipset (pixie mode 5) ──
+    {'signal': -55, 'wps_ver': '2.0', 'wps_locked': False, 'is_vuln': True,
+     'attempt': 1, 'timeouts': 0, 'resp_delay': 0.4, 'm_msgs': 5, 'fails': 0, 'hist_locks': 0},
+
+    # ── NEW: Broadcom chipset (pixie mode 3) ──
+    {'signal': -48, 'wps_ver': '2.0', 'wps_locked': False, 'is_vuln': True,
+     'attempt': 1, 'timeouts': 0, 'resp_delay': 0.5, 'm_msgs': 5, 'fails': 0, 'hist_locks': 0},
+
+    # ── NEW: Ralink chipset (pixie mode 4) ──
+    {'signal': -52, 'wps_ver': '2.0', 'wps_locked': False, 'is_vuln': True,
+     'attempt': 1, 'timeouts': 0, 'resp_delay': 0.6, 'm_msgs': 4, 'fails': 0, 'hist_locks': 0},
+
+    # ── NEW: Qualcomm/Atheros chipset ──
+    {'signal': -45, 'wps_ver': '2.0', 'wps_locked': False, 'is_vuln': True,
+     'attempt': 1, 'timeouts': 0, 'resp_delay': 0.7, 'm_msgs': 4, 'fails': 0, 'hist_locks': 0},
+
+    # ── NEW: 802.11ax (WiFi 6) devices ──
+    {'signal': -35, 'wps_ver': '2.0', 'wps_locked': False, 'is_vuln': True,
+     'attempt': 1, 'timeouts': 0, 'resp_delay': 0.3, 'm_msgs': 5, 'fails': 0, 'hist_locks': 0},
+    {'signal': -40, 'wps_ver': '2.0', 'wps_locked': False, 'is_vuln': True,
+     'attempt': 1, 'timeouts': 0, 'resp_delay': 0.4, 'm_msgs': 6, 'fails': 0, 'hist_locks': 0},
+
+    # ── NEW: IoT device scenarios (ESP32-based) ──
+    {'signal': -30, 'wps_ver': '2.0', 'wps_locked': False, 'is_vuln': True,
+     'attempt': 1, 'timeouts': 0, 'resp_delay': 0.2, 'm_msgs': 6, 'fails': 0, 'hist_locks': 0},
+
+    # ── NEW: Edge case - WPS locked but signal strong ──
+    {'signal': -35, 'wps_ver': '2.0', 'wps_locked': True, 'is_vuln': True,
+     'attempt': 1, 'timeouts': 0, 'resp_delay': 0, 'm_msgs': 0, 'fails': 0, 'hist_locks': 1},
+
+    # ── NEW: Edge case - WPS v1.0 with good signal ──
+    {'signal': -42, 'wps_ver': '1.0', 'wps_locked': False, 'is_vuln': False,
+     'attempt': 1, 'timeouts': 0, 'resp_delay': 1.5, 'm_msgs': 3, 'fails': 0, 'hist_locks': 0},
+
+    # ── NEW: Multiple timeout but still responding ──
+    {'signal': -58, 'wps_ver': '2.0', 'wps_locked': False, 'is_vuln': False,
+     'attempt': 4, 'timeouts': 2, 'm_msgs': 3, 'resp_delay': 8.0, 'fails': 2, 'hist_locks': 0},
 ]
 
 # ═══ ABORT scenarios (dangerous/waste of time) — ~600 samples ═════════════
