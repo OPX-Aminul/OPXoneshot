@@ -988,6 +988,21 @@ Copyright (C) 2026 chkndrp
         help='A/B training persona: conservative | balanced | aggressive (default: balanced)'
     )
     adv_group.add_argument(
+        '--sync',
+        action='store_true',
+        help='Full community sync: push local data -> pull community data -> auto-train -> git push'
+    )
+    adv_group.add_argument(
+        '--push-data',
+        action='store_true',
+        help='Only upload local training data to Supabase (no pull/train)'
+    )
+    adv_group.add_argument(
+        '--pull-data',
+        action='store_true',
+        help='Only download community data and merge into model'
+    )
+    adv_group.add_argument(
         '--reverse-scan',
         action='store_true',
         help='Reverse order of networks in the list of networks. Useful on small displays'
@@ -1013,7 +1028,9 @@ Copyright (C) 2026 chkndrp
 
     if not args.check and not args.interface and not getattr(args, 'ai', False) and not getattr(args, 'install', False) \
        and not getattr(args, 'export', False) and not getattr(args, 'pull_model', False) \
-       and not getattr(args, 'push_model', False) and not getattr(args, 'import_data', None):
+       and not getattr(args, 'push_model', False) and not getattr(args, 'import_data', None) \
+       and not getattr(args, 'sync', False) and not getattr(args, 'push_data', False) \
+       and not getattr(args, 'pull_data', False):
         parser.error('argument -i/--interface is required')
 
     if (args.pixie_force or args.show_pixie) and not args.pixie_dust:
@@ -4226,6 +4243,12 @@ def _aiAutonomousMode():
 
     agent.finalize()
     print(f'[AI] Model saved: {agent.status()}')
+
+    # Auto-push new training data to Supabase community store
+    try:
+        SyncEngine().push_data(agent)
+    except Exception:
+        pass
     print()
 
 def _installGlobally():
@@ -4295,6 +4318,220 @@ def syncModelToRepo(agent=None):
                 shutil.copy2(s, os.path.join(models_dir, name))
             except Exception:
                 pass
+
+
+# ---------------------------------------------------------------------------
+# Supabase community training sync
+# ---------------------------------------------------------------------------
+
+SUPABASE_URL = os.environ.get('SUPABASE_URL', 'https://oenckshhftqjjwhngxzo.supabase.co')
+SUPABASE_KEY = os.environ.get('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9lbmNrc2hoZnRxamp3aG5neHpvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc4MDkzNzYsImV4cCI6MjEwMzM4NTM3Nn0.xetav4AA9f3Vr6TjWcLtejCBboZKwrTg3DTEj00TkRo')
+SUPABASE_TABLE = 'training_data'
+
+
+class SyncEngine:
+    """Upload/download community training data via the Supabase REST API.
+
+    Every user's ``record()`` entries are pushed to a shared Supabase table
+    (public, anon read/write).  ``--sync`` pulls all rows, merges them into the
+    model, retrains RF/SGD, then commits + pushes the improved model to GitHub.
+    """
+
+    def __init__(self):
+        self.url  = SUPABASE_URL.rstrip('/')
+        self.key  = SUPABASE_KEY
+        self.api  = f'{self.url}/rest/v1/{SUPABASE_TABLE}'
+        self._hdr = {
+            'apikey': self.key,
+            'Authorization': f'Bearer {self.key}',
+            'Content-Type': 'application/json',
+        }
+
+    # ---- upload local training log ---------------------------------------
+    def push_data(self, agent: AIAgent = None) -> int:
+        if agent is None:
+            agent = AIAgent()
+        rows = agent.training_log[-500:]
+        if not rows:
+            print('[sync] Nothing new to upload')
+            return 0
+
+        # Normalize each recorded entry into a DB row
+        payload = []
+        for r in rows:
+            payload.append({
+                'user_id': r.get('user', agent.user_id),
+                'signal':  r.get('signal'),
+                'locked':  r.get('locked'),
+                'action':  r.get('action'),
+                'success': r.get('success'),
+                'reward':  r.get('reward'),
+                'profile': agent.profile,
+                'v':       '2.0',
+            })
+
+        import urllib.request
+        data = json.dumps(payload).encode()
+        req  = urllib.request.Request(self.api, data=data, headers=self._hdr, method='POST')
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                body = resp.read().decode()
+                print(f'[sync] Uploaded {len(payload)} records (+{resp.status})')
+                return len(payload)
+        except urllib.error.HTTPError as e:
+            body = e.read().decode()
+            if 'PGRST205' in body:
+                print('[sync] Table \'training_data\' missing.')
+                print('[sync] Run supabase_setup.sql in your Supabase SQL Editor first.')
+            else:
+                print(f'[sync] Upload failed: {e.code} {body[:200]}')
+            return 0
+        except Exception as e:
+            print(f'[sync] Upload error: {e}')
+            return 0
+
+    # ---- download all community rows -------------------------------------
+    def pull_data(self, agent: AIAgent = None) -> tuple[AIAgent, int]:
+        import urllib.request, urllib.parse
+
+        if agent is None:
+            agent = AIAgent()
+
+        limit = 2000
+        offset = 0
+        merged_obs = 0
+
+        while True:
+            q = urllib.parse.urlencode({
+                'select': 'user_id,signal,locked,action,success,reward,profile',
+                'order': 'ts.desc',
+                'limit': str(limit),
+                'offset': str(offset),
+            })
+            url = f'{self.api}?{q}'
+            req = urllib.request.Request(url, headers=self._hdr, method='GET')
+            try:
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    rows = json.loads(resp.read().decode())
+            except urllib.error.HTTPError as e:
+                body = e.read().decode()
+                print(f'[sync] Pull failed: {e.code} {body[:200]}')
+                break
+            except Exception as e:
+                print(f'[sync] Pull error: {e}')
+                break
+
+            if not rows:
+                break
+
+            # Convert rows back into observations for training
+            for r in rows:
+                ctx = {
+                    'bssid': '', 'signal': r.get('signal') or -50,
+                    'wps_version': '2.0', 'wps_locked': bool(r.get('locked')),
+                    'is_vulnerable': False, 'attempt': 1,
+                    'timeouts': 0, 'resp_delay': 0.5, 'm_msgs': 3 if r.get('success') else 0,
+                    'fails': 0 if r.get('success') else 1, 'hist_locks': 0,
+                }
+                feat = agent.extract(ctx)
+                action = r.get('action') or 'proceed'
+                success = bool(r.get('success'))
+
+                # Only add non-duplicate observations
+                key = (feat[0], feat[2], action, success)
+                if key not in agent._seen_keys:
+                    agent._seen_keys.add(key)
+                    agent.X.append(feat)
+                    agent.y.append('proceed' if success else 'skip')
+                    merged_obs += 1
+
+            offset += len(rows)
+            if len(rows) < limit:
+                break
+
+        print(f'[sync] Pulled {merged_obs} merged observations ({len(agent.X)} total)')
+        return agent, merged_obs
+
+    # ---- full pipeline: push + pull + retrain + git push -----------------
+    def full_sync(self, profile: str = 'balanced', do_git: bool = True) -> bool:
+        agent = AIAgent(profile=profile)
+        agent._seen_keys = set()
+
+        # 1. Upload local data
+        self.push_data(agent)
+
+        # 2. Download community data
+        agent, n = self.pull_data(agent)
+
+        # 3. Retrain on the merged dataset
+        if agent.has_ml and len(agent.X) >= 20:
+            print('[sync] Retraining model on merged community data...')
+            agent._train_rf()
+            try:
+                import numpy as np
+                if len(np.unique(agent.y)) >= 2:
+                    agent._init_sgd()
+            except Exception:
+                pass
+        agent.finalize()
+        print(f'[sync] Model: {agent.status()}')
+
+        # 4. Sync model files into repo and push to GitHub
+        syncModelToRepo(agent)
+        if do_git:
+            import subprocess
+            cwd = os.path.dirname(os.path.abspath(__file__))
+            msg = f'training: community sync, Q({len(agent.q_table)}) obs({len(agent.X)})'
+            try:
+                subprocess.run(['git', 'add', '-A'], cwd=cwd, capture_output=True, timeout=30)
+                r = subprocess.run(['git', 'commit', '-m', msg], cwd=cwd,
+                                   capture_output=True, text=True, timeout=30)
+                if 'nothing to commit' in (r.stdout + r.stderr):
+                    print('[sync] No changes to commit')
+                else:
+                    r = subprocess.run(['git', 'push', 'origin'], cwd=cwd,
+                                       capture_output=True, text=True, timeout=120)
+                    if r.returncode == 0:
+                        print(f'[sync] Pushed: {msg}')
+                    else:
+                        print(f'[sync] Push failed: {r.stderr}')
+                        return False
+            except Exception as e:
+                print(f'[sync] Git error: {e}')
+                return False
+        return True
+
+
+def _tryAutoPush(agent):
+    """Quietly push any new training data to Supabase after an attack.
+    Never blocks or crashes the main flow."""
+    try:
+        if agent and getattr(agent, 'training_log', None):
+            SyncEngine().push_data(agent)
+    except Exception:
+        pass
+
+def _syncHandler(args):
+    """Handle --sync / --push-data / --pull-data."""
+    engine = SyncEngine()
+    profile = getattr(args, 'profile', 'balanced')
+
+    if getattr(args, 'push_data', False):
+        agent = AIAgent(profile=profile)
+        n = engine.push_data(agent)
+        print(f'[sync] Pushed {n} records')
+        return True
+
+    if getattr(args, 'pull_data', False):
+        agent, n = engine.pull_data(AIAgent(profile=profile))
+        agent.finalize()
+        syncModelToRepo(agent)
+        print(f'[sync] Model updated: {agent.status()}')
+        return True
+
+    if getattr(args, 'sync', False):
+        return engine.full_sync(profile=profile, do_git=True)
+    return False
 
 def _communityTraining(args):
     """Community model --export / --import-data / --pull-model / --push-model."""
@@ -4419,6 +4656,12 @@ def main():
     if (getattr(args, 'export', False) or getattr(args, 'import_data', None)
             or getattr(args, 'pull_model', False) or getattr(args, 'push_model', False)):
         _communityTraining(args)
+        return
+
+    # Supabase community sync commands (no interface needed)
+    if (getattr(args, 'sync', False) or getattr(args, 'push_data', False)
+            or getattr(args, 'pull_data', False)):
+        _syncHandler(args)
         return
 
     if getattr(args, 'install', False):
