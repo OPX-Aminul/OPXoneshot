@@ -3462,7 +3462,8 @@ class AIAgent:
                 }, fh)
 
             if self.has_ml:
-                joblib.dump({'rf': self.rf_model, 'sgd': self.sgd_model}, tmp_model)
+                joblib.dump({'rf': self.rf_model, 'sgd': self.sgd_model},
+                            tmp_model, compress=3)
 
             with open(tmp_qtab, 'wb') as fh:
                 pickle.dump(self.q_table, fh)
@@ -4759,6 +4760,10 @@ class SyncEngine:
 
                 # Skip impossible / malformed rows (plan §6)
                 if not validate_event(r):
+                    continue
+
+                # Noise / poisoning filter (plan §13,14): skip low-quality events
+                if quality_score(r) < 0.25:
                     continue
 
                 ctx = {
