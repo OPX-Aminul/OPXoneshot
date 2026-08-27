@@ -955,6 +955,11 @@ Copyright (C) 2026 chkndrp
         help="Don't touch the Android Wi-Fi settings on startup and exit"
     )
     adv_group.add_argument(
+        '--install',
+        action='store_true',
+        help='Install wifi4 + oneshot globally to /usr/local/bin'
+    )
+    adv_group.add_argument(
         '--reverse-scan',
         action='store_true',
         help='Reverse order of networks in the list of networks. Useful on small displays'
@@ -978,7 +983,7 @@ Copyright (C) 2026 chkndrp
 
     args = parser.parse_args()
 
-    if not args.check and not args.interface and not getattr(args, 'ai', False):
+    if not args.check and not args.interface and not getattr(args, 'ai', False) and not getattr(args, 'install', False):
         parser.error('argument -i/--interface is required')
 
     if (args.pixie_force or args.show_pixie) and not args.pixie_dust:
@@ -4089,6 +4094,57 @@ def _aiAutonomousMode():
     print(f'[AI] Model saved: {agent.status()}')
     print()
 
+def _installGlobally():
+    """Install wifi4 + oneshot globally to /usr/local/bin."""
+    import shutil
+
+    if os.getuid() != 0:
+        print('[!] Run as root: sudo python3 oneshot.py --install')
+        return
+
+    install_dir = '/usr/local/bin/oneshot-ai'
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+
+    print('[*] Installing OneShot AI globally...')
+
+    os.makedirs(install_dir, exist_ok=True)
+
+    # Copy oneshot.py
+    shutil.copy2(os.path.join(script_dir, 'oneshot.py'), install_dir)
+    os.chmod(os.path.join(install_dir, 'oneshot.py'), 0o755)
+
+    # Copy models/ if exists
+    models_src = os.path.join(script_dir, 'models')
+    if os.path.isdir(models_src):
+        shutil.copytree(models_src, os.path.join(install_dir, 'models'), dirs_exist_ok=True)
+
+    # Copy vulnwsc.txt if exists
+    vuln_src = os.path.join(script_dir, 'vulnwsc.txt')
+    if os.path.exists(vuln_src):
+        shutil.copy2(vuln_src, install_dir)
+
+    # Create wifi4 command
+    wifi4_path = '/usr/local/bin/wifi4'
+    with open(wifi4_path, 'w') as f:
+        f.write('#!/bin/bash\n')
+        f.write('# wifi4 — OneShot AI autonomous WiFi tool\n')
+        f.write('exec python3 /usr/local/bin/oneshot-ai/oneshot.py --ai "$@"\n')
+    os.chmod(wifi4_path, 0o755)
+
+    # Create oneshot command
+    oneshot_path = '/usr/local/bin/oneshot'
+    with open(oneshot_path, 'w') as f:
+        f.write('#!/bin/bash\n')
+        f.write('# oneshot — OneShot AI WiFi tool\n')
+        f.write('exec python3 /usr/local/bin/oneshot-ai/oneshot.py "$@"\n')
+    os.chmod(oneshot_path, 0o755)
+
+    print('[+] Installed!')
+    print('[+] Usage: wifi4')
+    print('[+] Usage: oneshot --ai')
+    print('[+] Usage: oneshot --check BSSID')
+    print(f'[+] Location: {install_dir}/')
+
 def main():
     """Main os-e code"""
     global args
@@ -4097,6 +4153,10 @@ def main():
 
     if args.check:
         checkBssid(args.check, args.interface)
+        return
+
+    if getattr(args, 'install', False):
+        _installGlobally()
         return
 
     checkRequirements()
