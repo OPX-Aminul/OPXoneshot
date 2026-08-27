@@ -1,8 +1,7 @@
                     GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 
- Copyright (C) 2026 chkndrp <https://github.com/OPX-Aminul>
-
+ Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
  Everyone is permitted to copy and distribute verbatim copies
  of this license document, but changing it is not allowed.
 
@@ -69,31 +68,107 @@ patents cannot be used to render the program non-free.
   The precise terms and conditions for copying, distribution and
 modification follow.
 
-  For the full text of the GNU General Public License v3.0, see:
-  https://www.gnu.org/licenses/gpl-3.0.txt
+  TERMINOLOGY
+  ===========
 
-  SPDX-License-Identifier: GPL-3.0-only
+  For the full, legally binding text of the GNU General Public License
+version 3.0, please refer to:
+    https://www.gnu.org/licenses/gpl-3.0.txt
+    https://www.gnu.org/licenses/gpl-3.0.html
+
+  The complete text is too extensive to reproduce in full here, but the
+license terms are exactly those of the standard GPL-3.0 as published by
+the Free Software Foundation.
+
+  SUMMARY OF KEY TERMS:
+  ---------------------
+  1. FREEDOM TO RUN: You may run the program for any purpose.
+  2. FREEDOM TO STUDY: You may study how the program works and change it
+     to suit your needs. Access to the source code is a precondition.
+  3. FREEDOM TO REDISTRIBUTE: You may redistribute copies so you can
+     help others.
+  4. FREEDOM TO DISTRIBUTE MODIFIED VERSIONS: You may distribute
+     modified versions, giving the whole community a chance to benefit.
+
+  CONDITIONS:
+  -----------
+  - You MUST preserve all copyright and license notices.
+  - You MUST license derivative works under GPL-3.0.
+  - You MUST provide the complete source code to recipients.
+  - NO WARRANTY is provided for this software.
+  - You MAY NOT apply legal terms that restrict others from exercising
+    the rights granted by this license.
+
+  For the complete terms and conditions, see:
+  https://www.gnu.org/licenses/gpl-3.0.txt
 
 ---
 
-## Additional Terms
+SPDX-License-Identifier: GPL-3.0-only
 
-**Unauthorized commercial use, rebranding, or closed-source distribution
-is strictly prohibited under GPL-3.0 and subject to immediate DMCA takedown.**
+---
 
-This software is provided EXCLUSIVLY under the GNU General Public License
-v3.0. Any entity attempting to:
-  - Redistribute this software under a proprietary or closed-source license
-  - Remove or obscure the GPL-3.0 license notices
-  - Use this software for unauthorized network access or illegal purposes
-  - Claim authorship or rebrand without explicit attribution
+                        ADDITIONAL PROJECT TERMS
+                        =========================
+
+Copyright (C) 2026 chkndrp <https://github.com/OPX-Aminul>
+
+This software (OneShot-Extended / OPX) is licensed under the GNU General
+Public License v3.0 (GPL-3.0).
+
+  ** Unauthorized commercial use, rebranding, or closed-source distribution
+     is strictly prohibited under GPL-3.0 and subject to immediate DMCA
+     takedown. **
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+---
+
+RESTRICTIONS ON USE
+===================
+
+Any entity attempting to:
+
+  (a) Redistribute this software under a proprietary or closed-source
+      license;
+
+  (b) Remove or obscure the GPL-3.0 license notices, copyright notices,
+      or SPDX identifiers;
+
+  (c) Use this software for unauthorized network access, unauthorized
+      penetration testing, or any illegal purpose;
+
+  (d) Claim authorship, rebrand, or sell this software without explicit
+      written permission from the original author;
+
+  (e) Distribute modified versions without clearly marking them as such
+      and without releasing the full source code under GPL-3.0;
 
 ...will be in direct violation of the GPL-3.0 license terms and will be
 subject to immediate DMCA takedown, legal action, and/or revocation of
 access to all derivative works.
 
-Copyright (C) 2026 chkndrp
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
+---
+
+DESIGNATED AGENT FOR DMCA NOTICES
+==================================
+
+For DMCA takedown requests regarding unauthorized use of this software,
+contact the project maintainer via GitHub:
+  https://github.com/OPX-Aminul/OPXoneshot/issues
+
+---
+
+SPDX-FileCopyrightText: 2026 chkndrp
+SPDX-License-Identifier: GPL-3.0-only

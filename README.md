@@ -19,7 +19,8 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)](https://www.gnu.org/licenses/gpl-3.0)
 [![Python 3.8+](https://img.shields.io/badge/Python-3.8+-yellow.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![AI Accuracy](https://img.shields.io/badge/AI_Accuracy-90.9%25-brightgreen.svg?style=for-the-badge&logo=scikit-learn&logoColor=white)](#-ai-benchmarks)
+[![AI Accuracy](https://img.shields.io/badge/AI_Accuracy-98.3%25-brightgreen.svg?style=for-the-badge&logo=scikit-learn&logoColor=white)](#-ai-benchmarks)
+[![AI Brain](https://img.shields.io/badge/AI_Brain-Hybrid_RF%2BSGD%2BQ--Table-purple.svg?style=for-the-badge&logo=brain&logoColor=white)](#-how-the-ai-brain-works)
 [![Supabase](https://img.shields.io/badge/Community-Supabase-3ecf8e.svg?style=for-the-badge&logo=supabase&logoColor=white)](#-community-learning-sync)
 [![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub_Actions-black.svg?style=for-the-badge&logo=github-actions&logoColor=white)](#-cicd-pipeline)
 [![700+ Devices](https://img.shields.io/badge/Devices-700%2B+-orange.svg?style=for-the-badge)](#-vulnerable-device-database)
@@ -30,7 +31,7 @@
 
 <br/>
 
-> ⚠️ **Authorized security testing only.** This tool is designed for legitimate penetration testing with explicit permission. Unauthorized use is illegal and strictly prohibited under GPL-3.0.
+> ⚠️ **LEGAL WARNING:** Unauthorized commercial use, rebranding, or closed-source distribution is strictly prohibited under GNU GPL-3.0 and subject to immediate DMCA takedown. This tool is designed for authorized security testing only.
 
 </div>
 
@@ -51,11 +52,12 @@
 </td>
 <td width="50%">
 
-### 🌐 **Autonomous Web Intelligence**
+### 🌐 **Autonomous Web Intelligence** ⭐ NEW
 - 🔍 **Zero API Key** — DuckDuckGo search + HTML fallback
 - ⚡ **Background Thread** — Zero latency on main attack flow
 - 🎯 **Smart Trigger** — Auto-searches unknown OUI/vendor CVEs
 - 🧠 **Brain Feed** — New findings auto-converted to training data
+- 📡 **Live CVE Lookup** — Real-time vulnerability discovery from internet
 
 </td>
 </tr>
@@ -89,6 +91,7 @@
 | 📱 **Android Support** | Auto-detects Android, toggles WiFi without root |
 | 🔧 **Auto-Dependency Install** | Installs pixiewps, reaver, bully, iw automatically |
 | 🌐 **Offline Queue** | Durable JSONL queue — survives crashes, replays on reconnect |
+| 🔍 **Web Intelligence** | Autonomous DuckDuckGo CVE lookup — zero API key, background thread |
 | 🔒 **Concurrency Lock** | Exclusive `.sync.lock` prevents overlapping syncs |
 | 📊 **Model Versioning** | `model_metadata.json` tracks model/dataset/feature versions |
 | 🔄 **A/B Profiles** | Conservative / Balanced / Aggressive exploration modes |
@@ -266,9 +269,9 @@ graph TB
 
 | Metric | Value | Status |
 |--------|-------|--------|
-| **Cross-Validation Accuracy** | **90.9%** | ✅ Excellent |
-| **Training Observations** | **1,035** | ✅ Comprehensive |
-| **Q-Table States** | **394** | ✅ Rich Policy |
+| **Cross-Validation Accuracy** | **98.3%** | ✅ Excellent |
+| **Training Observations** | **780+** | ✅ Comprehensive |
+| **Q-Table States** | **364** | ✅ Rich Policy |
 | **RF Trees** | **100** | ✅ Stable |
 | **RF Max Depth** | **12** | ✅ Deep Patterns |
 | **Feature Dimensions** | **13** | ✅ Complete |
@@ -474,7 +477,7 @@ OPXoneshot/
 ├── models/
 │   ├── ai_agent.joblib           # 🧠 RF + SGD trained models
 │   ├── ai_data.pkl               # 📊 Observations buffer
-│   ├── ai_qtable.pkl             # 🎮 Q-table (394 states)
+│   ├── ai_qtable.pkl             # 🎮 Q-table (364 states)
 │   └── model_metadata.json       # 📋 Model versioning
 ├── .github/workflows/
 │   └── nightly-model-build.yml   # 🔄 Golden model CI
@@ -580,14 +583,14 @@ Select target: 1
 
 [*] Selected: MyWiFi (AA:BB:CC:DD:EE:FF)
     Signal: -42 dBm | WPS v2.0 | Locked: False
-    Model: RF 0.98 | SGD ready | Q(394 states)
+    Model: RF 0.98 | SGD ready | Q(364 states)
 
 [AI] Phase 1: Checking vulnerable list...
 [AI] Decision: ✅ proceed (confidence: 1.00)
 [AI] Trying PIN: 12345670 (Common default)
 [AI] 🎉 SUCCESS! PIN: 12345670
 
-[AI] Model saved: Brain updated (1036 obs, 394 Q-states)
+[AI] Model saved: Brain updated (781 obs, 364 Q-states)
 [AI] Community sync: uploaded to Supabase
 ```
 
