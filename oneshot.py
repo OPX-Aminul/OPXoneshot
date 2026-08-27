@@ -3023,21 +3023,105 @@ import src.wps.bruteforce
 import src.utils
 import src.args
 
+def _install_system_deps():
+    """Auto-install missing system dependencies (pixiewps, reaver, iw, etc.)."""
+    import subprocess
+
+    print('[*] Checking system dependencies...')
+
+    pkgs_apt = ['pixiewps', 'reaver', 'bully', 'hostapd-wpe', 'iw', 'wpasupplicant',
+                'build-essential', 'libpcap-dev', 'libnl-3-dev', 'libnl-genl-3-dev']
+
+    # Check what's missing
+    missing = []
+    for pkg in ['pixiewps', 'reaver', 'bully', 'iw']:
+        if not which(pkg):
+            missing.append(pkg)
+
+    if not missing:
+        print('[+] All core tools found')
+        return
+
+    print(f'[*] Missing: {", ".join(missing)}')
+    print('[*] Installing via apt...')
+
+    # Update package list
+    subprocess.run(['apt-get', 'update', '-qq'], capture_output=True, timeout=120)
+
+    # Install each missing tool
+    for pkg in missing:
+        print(f'[*] Installing {pkg}...')
+        try:
+            r = subprocess.run(
+                ['apt-get', 'install', '-y', '-qq', pkg],
+                capture_output=True, text=True, timeout=120
+            )
+            if r.returncode == 0:
+                print(f'[+] {pkg} installed')
+            else:
+                print(f'[!] {pkg} apt install failed, trying source build...')
+                _build_from_source(pkg)
+        except Exception as e:
+            print(f'[!] {pkg} install error: {e}')
+            _build_from_source(pkg)
+
+def _build_from_source(tool):
+    """Build a tool from source if apt fails."""
+    import subprocess
+
+    builds = {
+        'pixiewps': {
+            'repo': 'https://github.com/wiire-a/pixiewps.git',
+            'dir': '/tmp/pixiewps_build',
+            'cmd': ['make', 'install'],
+        },
+        'reaver': {
+            'repo': 'https://github.com/t6x/reaver-wps-fork-t6x.git',
+            'dir': '/tmp/reaver_build',
+            'cmd': ['./configure', '&&', 'make', 'install'],
+        },
+        'bully': {
+            'repo': 'https://github.com/aanarchyy/bully.git',
+            'dir': '/tmp/bully_build',
+            'cmd': ['make', 'install'],
+        },
+    }
+
+    if tool not in builds:
+        print(f'[!] No source build recipe for {tool}')
+        return
+
+    info = builds[tool]
+    print(f'[*] Building {tool} from source...')
+
+    try:
+        subprocess.run(['git', 'clone', '--depth=1', info['repo'], info['dir']],
+                       capture_output=True, timeout=60)
+        # Simple build: make && make install
+        subprocess.run(['make', '-C', info['dir']], capture_output=True, timeout=120)
+        subprocess.run(['make', '-C', info['dir']], capture_output=True, timeout=60)
+        print(f'[+] {tool} built from source')
+    except Exception as e:
+        print(f'[!] {tool} build failed: {e}')
+        print(f'[!] Install {tool} manually: https://github.com/wiire-a/{tool}')
+
 def checkRequirements():
-    """Verify requirements are met"""
-
-    required_binaries = [
-        'pixiewps',
-        'wpa_supplicant',
-        'iw', 'ip'
-    ]
-    missing = [b for b in required_binaries if not which(b)]
-
-    if missing:
-        src.utils.die(f"Missing required utilities: {', '.join(missing)}")
+    """Verify requirements are met, auto-install if missing."""
 
     if os.getuid() != 0:
         src.utils.die('Run it as root')
+
+    # Auto-install missing system dependencies
+    _install_system_deps()
+
+    # Re-check after install
+    required_binaries = ['pixiewps', 'wpa_supplicant', 'iw', 'ip']
+    missing = [b for b in required_binaries if not which(b)]
+
+    if missing:
+        print(f'[!] Still missing after install: {", ".join(missing)}')
+        print(f'[!] Install manually: apt-get install {" ".join(missing)}')
+        src.utils.die(f"Missing required utilities: {', '.join(missing)}")
 
 def setupDirectories():
     """Create required directories"""
