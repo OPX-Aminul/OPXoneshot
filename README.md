@@ -200,6 +200,9 @@
 | 🕵️ **Stealth Jitter** | Random micro-delays to evade firewall/IDS fingerprinting |
 | 🛡️ **Poison Guard** | Adversarial trap detection protects Q-Table and SGD weights |
 | 🐝 **Swarm Mode** | Multi-adapter parallel scanning with ThreadPoolExecutor |
+| 🧮 **Mathematical Reasoning** | Probability, Bayesian updates, pattern detection, optimization |
+| 💻 **Code Intelligence** | Tool output parsing, error-to-fix mapping, script generation |
+| 🔍 **Error Interpreter** | Error classification, severity assessment, recovery strategies |
 
 ---
 
