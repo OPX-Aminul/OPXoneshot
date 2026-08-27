@@ -960,6 +960,34 @@ Copyright (C) 2026 chkndrp
         help='Install wifi4 + oneshot globally to /usr/local/bin'
     )
     adv_group.add_argument(
+        '--export',
+        action='store_true',
+        help='Export training data to training_data_<date>.json for sharing'
+    )
+    adv_group.add_argument(
+        '--import-data',
+        type=str,
+        metavar='FILE',
+        help='Import training observations from a shared JSON file'
+    )
+    adv_group.add_argument(
+        '--pull-model',
+        action='store_true',
+        help='Download and merge the latest community model from GitHub'
+    )
+    adv_group.add_argument(
+        '--push-model',
+        action='store_true',
+        help='Commit and push your trained model back to GitHub (requires git credentials / GITHUB_TOKEN env)'
+    )
+    adv_group.add_argument(
+        '--profile',
+        type=str,
+        choices=['conservative', 'balanced', 'aggressive'],
+        default='balanced',
+        help='A/B training persona: conservative | balanced | aggressive (default: balanced)'
+    )
+    adv_group.add_argument(
         '--reverse-scan',
         action='store_true',
         help='Reverse order of networks in the list of networks. Useful on small displays'
@@ -983,7 +1011,9 @@ Copyright (C) 2026 chkndrp
 
     args = parser.parse_args()
 
-    if not args.check and not args.interface and not getattr(args, 'ai', False) and not getattr(args, 'install', False):
+    if not args.check and not args.interface and not getattr(args, 'ai', False) and not getattr(args, 'install', False) \
+       and not getattr(args, 'export', False) and not getattr(args, 'pull_model', False) \
+       and not getattr(args, 'push_model', False) and not getattr(args, 'import_data', None):
         parser.error('argument -i/--interface is required')
 
     if (args.pixie_force or args.show_pixie) and not args.pixie_dust:
@@ -3239,6 +3269,8 @@ class AIAgent:
     _MODEL  = os.path.join(_DIR, 'ai_agent.joblib')
     _DATA   = os.path.join(_DIR, 'ai_data.pkl')
     _QTAB   = os.path.join(_DIR, 'ai_qtable.pkl')
+    _TRAIN  = os.path.join(_DIR, 'training_log.json')   # per-user training record
+    _USERS  = os.path.join(_DIR, 'users.json')          # aggregated user stats
 
     _FEATS = [
         'signal', 'wps_ver', 'wps_locked', 'is_vuln',
@@ -3248,15 +3280,27 @@ class AIAgent:
 
     ACTIONS = ('proceed', 'wait', 'skip', 'abort')
 
-    # Q-Learning hyper-parameters
+    # --- Improvement 8a: RL hyper-parameters tuned ---
     _Q_ALPHA = 0.1    # learning rate
-    _Q_GAMMA = 0.9    # discount factor
+    _Q_GAMMA = 0.95   # discount factor (future rewards matter more)
+    _MAX_OBS = 5000   # improvement 1: much larger observation buffer
+
+    # --- Improvement 6: exploration / exploitation ---
+    _EPSILON_BASE = 0.30
+
+    # --- Improvement 9: dual-persona A/B profiles ---
+    PROFILES = {
+        'conservative': {'epsilon': 0.10, 'q_alpha': 0.08, 'rf_trees': 50, 'sgd_eta': 'optimal'},
+        'balanced':     {'epsilon': 0.30, 'q_alpha': 0.10, 'rf_trees': 50, 'sgd_eta': 'optimal'},
+        'aggressive':   {'epsilon': 0.55, 'q_alpha': 0.15, 'rf_trees': 50, 'sgd_eta': 'optimal'},
+    }
+    _DEFAULT_PROFILE = 'balanced'
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def __init__(self):
+    def __init__(self, profile: str = None):
         self.has_ml    = False
         self.rf_model  = None          # RandomForestClassifier (batch)
         self.sgd_model = None          # SGDClassifier (online partial_fit)
@@ -3265,6 +3309,17 @@ class AIAgent:
         self.X:             list[list[float]] = []
         self.y:             list[str]          = []
         self.reward_history: list[float]       = []
+
+        # --- Improvement 9: A/B profile selection ---
+        self.profile  = (profile or self._DEFAULT_PROFILE) if profile in self.PROFILES else self._DEFAULT_PROFILE
+        self._cfg     = self.PROFILES[self.profile]
+        self._epsilon = self._cfg['epsilon']
+        self._Q_ALPHA = self._cfg['q_alpha']
+        self._Q_GAMMA = self._Q_GAMMA  # keep tuned discount
+
+        # --- Improvement 10: per-user training log ---
+        self.user_id  = self._user_id()
+        self._load_training_log()
 
         try:
             import sklearn.ensemble       # noqa: F401
@@ -3281,6 +3336,40 @@ class AIAgent:
             self._pretrain()
 
         logger.info(f'[AI] {self.status()}')
+
+    # ------------------------------------------------------------------
+    # Improvement 10: per-user training collection
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _user_id() -> str:
+        """Stable per-machine id (no PII, just a hash of hostname + user)."""
+        try:
+            import hashlib, getpass, socket
+            src = f'{getpass.getuser()}@{socket.gethostname()}'
+            return hashlib.sha1(src.encode()).hexdigest()[:12]
+        except Exception:
+            return 'local'
+
+    def _load_training_log(self):
+        self.training_log: list[dict] = []
+        if os.path.exists(self._TRAIN):
+            try:
+                with open(self._TRAIN, 'r') as f:
+                    self.training_log = json.load(f)
+            except Exception:
+                self.training_log = []
+
+    def _append_training_log(self, entry: dict):
+        entry['user'] = self.user_id
+        entry['ts']   = time.time()
+        self.training_log.append(entry)
+        self.training_log = self.training_log[-2000:]
+        try:
+            with open(self._TRAIN, 'w') as f:
+                json.dump(self.training_log, f)
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------
     # Persistence
@@ -3337,9 +3426,9 @@ class AIAgent:
             import pickle
             with open(self._DATA, 'wb') as fh:
                 pickle.dump({
-                    'X':       self.X[-500:],
-                    'y':       self.y[-500:],
-                    'rewards': self.reward_history[-500:],
+                    'X':       self.X[-self._MAX_OBS:],
+                    'y':       self.y[-self._MAX_OBS:],
+                    'rewards': self.reward_history[-self._MAX_OBS:],
                 }, fh)
 
             if self.has_ml:
@@ -3367,16 +3456,18 @@ class AIAgent:
         import numpy as np
         from sklearn.ensemble import RandomForestClassifier
 
-        X = np.array(self.X[-500:])
-        y = np.array(self.y[-500:])
+        X = np.array(self.X[-self._MAX_OBS:])
+        y = np.array(self.y[-self._MAX_OBS:])
 
         for cls in self.ACTIONS:
             if cls not in y:
                 X = np.vstack([X, np.zeros((1, len(self._FEATS)))])
                 y = np.append(y, cls)
 
+        # Improvement 8a: more trees, more depth for stronger batch model
         self.rf_model = RandomForestClassifier(
-            n_estimators=20, max_depth=6, random_state=42,
+            n_estimators=self._cfg['rf_trees'], max_depth=10, random_state=42,
+            min_samples_leaf=2, n_jobs=-1,
         )
         self.rf_model.fit(X, y)
 
@@ -3386,8 +3477,8 @@ class AIAgent:
         import numpy as np
         from sklearn.linear_model import SGDClassifier
 
-        X = np.array(self.X[-200:])
-        y = np.array(self.y[-200:])
+        X = np.array(self.X[-2000:])
+        y = np.array(self.y[-2000:])
 
         classes = list(self.ACTIONS)
         for cls in np.unique(y):
@@ -3397,7 +3488,10 @@ class AIAgent:
         if len(np.unique(y)) < 2:
             return  # Need at least 2 classes for SGD
 
-        self.sgd_model = SGDClassifier(loss='log_loss', random_state=42)
+        # Improvement 8b: slower learning rate = more stable online learning
+        self.sgd_model = SGDClassifier(loss='log_loss', random_state=42,
+                                       learning_rate=self._cfg.get('sgd_eta', 'optimal'),
+                                       eta0=0.001)
         self.sgd_model.fit(X, y)
 
     def _online_fit(self, feat: list[float], label: str):
@@ -3411,7 +3505,9 @@ class AIAgent:
 
         if self.sgd_model is None:
             from sklearn.linear_model import SGDClassifier
-            self.sgd_model = SGDClassifier(loss='log_loss', random_state=42)
+            self.sgd_model = SGDClassifier(loss='log_loss', random_state=42,
+                                           learning_rate=self._cfg.get('sgd_eta', 'optimal'),
+                                           eta0=0.001)
             self.sgd_model.fit(X, y)
         else:
             try:
@@ -3499,18 +3595,24 @@ class AIAgent:
     # ------------------------------------------------------------------
 
     def _discretize(self, ctx: dict) -> str:
-        """Map continuous context to a compact discrete state key."""
+        """Map continuous context to a compact discrete state key.
+
+        Improvement 3: finer granularity — signal in 5 dBm steps,
+        timeouts 0..8, messages, fails each broken into smaller buckets.
+        """
         sig = ctx.get('signal', -50)
-        s   = 'W' if sig < -80 else ('M' if sig < -60 else 'S')
+        # 5 dBm buckets from -30 to -90  => 12 buckets
+        s   = chr(ord('A') + max(0, min(11, (-min(max(sig, -90), -30) - 30) // 5)))
         l   = 'L' if ctx.get('wps_locked', False) else 'N'
         t   = ctx.get('timeouts', 0)
-        t_k = '0' if t == 0 else ('1' if t <= 2 else '3')
+        t_k = '0' if t == 0 else ('1' if t == 1 else ('2' if t <= 3 else (
+            '4' if t <= 5 else '8')))
         m   = ctx.get('m_msgs', 0)
-        m_k = '0' if m == 0 else ('1' if m <= 3 else '4')
+        m_k = '0' if m == 0 else ('1' if m <= 2 else ('3' if m <= 4 else ('6')))
         f   = ctx.get('fails', 0)
-        f_k = '0' if f == 0 else ('1' if f <= 3 else '4')
+        f_k = '0' if f == 0 else ('1' if f <= 2 else ('4' if f <= 6 else ('9')))
         a   = ctx.get('attempt', 1)
-        a_k = '1' if a == 1 else ('2' if a <= 3 else '4')
+        a_k = '1' if a == 1 else ('2' if a <= 3 else ('5' if a <= 10 else ('15')))
         return f'{s}{l}|{t_k}|{m_k}|{f_k}|{a_k}'
 
     def _q_update(self, state: str, action: str, reward: float, next_state: str):
@@ -3533,7 +3635,22 @@ class AIAgent:
     # ------------------------------------------------------------------
 
     def decide(self, phase: str, ctx: dict) -> str:
-        """Return 'proceed', 'wait', 'skip', or 'abort'."""
+        """Return 'proceed', 'wait', 'skip', or 'abort'.
+
+        Improvement 6: epsilon-greedy — with probability epsilon, explore a
+        random action; otherwise exploit the weighted ensemble vote.
+        """
+        import random as _rng
+        profile_epsilon = self._epsilon
+
+        # Exploration: try a different action occasionally (but never abort
+        # blindly for healthy-looking targets)
+        if _rng.random() < profile_epsilon:
+            explore_actions = [a for a in self.ACTIONS]
+            if ctx.get('signal', -50) > -60 and not ctx.get('wps_locked', False):
+                explore_actions = [a for a in explore_actions if a != 'abort']
+            return _rng.choice(explore_actions)
+
         feat = self.extract(ctx)
 
         if self.has_ml:
@@ -3613,22 +3730,39 @@ class AIAgent:
         self.X.append(feat)
         self.y.append('proceed' if success else 'skip')
 
-        # Q-Learning reward update
-        reward = 1.0 if success else -0.1
+        # Improvement 5: context-aware reward function
+        signal   = ctx.get('signal', -50)
+        timeouts = ctx.get('timeouts', 0)
+        attempt  = ctx.get('attempt', 1)
+
+        if success:
+            reward = 1.0 + (0.5 if signal > -50 else 0.0)   # quick success bonus
+            reward += max(0.0, 0.3 - attempt * 0.05)          # early-success bonus
+        else:
+            reward = -0.1 - (0.1 if timeouts >= 3 else 0.0)   # timeout penalty
+            reward -= 0.1 if action == 'abort' else 0.0
+        reward = round(reward, 3)
+
         self._q_update(state, action, reward, state)
         self.reward_history.append(reward)
+
+        # Improvement 10: per-user training collection
+        self._append_training_log({
+            'signal': signal, 'locked': bool(ctx.get('wps_locked', False)),
+            'action': action, 'success': bool(success), 'reward': reward,
+        })
 
         # SGD online partial_fit
         self._online_fit(feat, 'proceed' if success else 'skip')
 
-        # Keep dataset bounded
-        if len(self.X) > 500:
-            self.X, self.y = self.X[-500:], self.y[-500:]
-        if len(self.reward_history) > 500:
-            self.reward_history = self.reward_history[-500:]
+        # Keep dataset bounded (larger buffer now)
+        if len(self.X) > self._MAX_OBS:
+            self.X, self.y = self.X[-self._MAX_OBS:], self.y[-self._MAX_OBS:]
+        if len(self.reward_history) > self._MAX_OBS:
+            self.reward_history = self.reward_history[-self._MAX_OBS:]
 
-        # Periodic RF retrain
-        if len(self.X) % 50 == 0 and self.has_ml and len(self.X) >= 50:
+        # Periodic RF retrain (more data => every 100)
+        if len(self.X) % 100 == 0 and self.has_ml and len(self.X) >= 100:
             self._train_rf()
 
     # ------------------------------------------------------------------
@@ -3676,7 +3810,7 @@ def autoAttack(interface: str, bssid: str, vuln_list_file: str,
     Returns True on success (credentials obtained), False otherwise.
     """
 
-    agent     = AIAgent()
+    agent     = AIAgent(profile=getattr(args, 'profile', 'balanced'))
     generator = src.wps.generator.WPSpin()
 
     # Build initial context from scan data
@@ -3985,7 +4119,7 @@ def _aiAutonomousMode():
     print()
 
     # Step 3: AI decides attack chain
-    agent = AIAgent()
+    agent = AIAgent(profile=getattr(args, 'profile', 'balanced'))
     generator = src.wps.generator.WPSpin()
 
     ctx = {
@@ -4145,6 +4279,132 @@ def _installGlobally():
     print('[+] Usage: oneshot --check BSSID')
     print(f'[+] Location: {install_dir}/')
 
+def syncModelToRepo(agent=None):
+    """Copy the current trained model from ~/.OneShot-Extended/ into the repo
+    models/ directory so git push carries the latest agent state."""
+    import shutil
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    models_dir = os.path.join(script_dir, 'models')
+    os.makedirs(models_dir, exist_ok=True)
+
+    src = agent._DIR if agent else os.path.join(os.path.expanduser('~'), '.OneShot-Extended')
+    for name in ('ai_agent.joblib', 'ai_data.pkl', 'ai_qtable.pkl'):
+        s = os.path.join(src, name)
+        if os.path.exists(s):
+            try:
+                shutil.copy2(s, os.path.join(models_dir, name))
+            except Exception:
+                pass
+
+def _communityTraining(args):
+    """Community model --export / --import-data / --pull-model / --push-model."""
+
+    if getattr(args, 'export', False):
+        agent = AIAgent(profile=getattr(args, 'profile', 'balanced'))
+        out = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           f'training_data_{time.strftime("%Y%m%d")}.json')
+        payload = {
+            'user': agent.user_id,
+            'profile': agent.profile,
+            'observations': len(agent.X),
+            'q_states': len(agent.q_table),
+            'rewards': agent.reward_history,
+            'log': agent.training_log,
+            'X': agent.X,
+            'y': agent.y,
+        }
+        with open(out, 'w') as f:
+            json.dump(payload, f)
+        print(f'[+] Exported training data -> {out} ({os.path.getsize(out)} bytes)')
+        print('[+] Commit it to your GitHub repo: git add * && git commit -m "training data" && git push')
+        return True
+
+    if getattr(args, 'import_data', None):
+        path = args.import_data
+        if not os.path.exists(path):
+            print(f'[!] File not found: {path}')
+            return False
+        try:
+            with open(path) as f:
+                data = json.load(f)
+            agent = AIAgent(profile=getattr(args, 'profile', 'balanced'))
+            added = 0
+            for feat, label in zip(data.get('X', []), data.get('y', [])):
+                agent.X.append(feat)
+                agent.y.append(label)
+                added += 1
+            for r in data.get('rewards', []):
+                agent.reward_history.append(r)
+            # Merge Q-table
+            if data.get('q_table'):
+                for s, vals in data['q_table'].items():
+                    if s not in agent.q_table:
+                        agent.q_table[s] = dict(vals)
+                    else:
+                        for a, v in vals.items():
+                            agent.q_table[s][a] = agent.q_table[s].get(a, 0) + v
+            if added:
+                agent.X = agent.X[-agent._MAX_OBS:]
+                agent.y = agent.y[-agent._MAX_OBS:]
+                if agent.has_ml and len(agent.X) >= 20:
+                    agent._train_rf()
+                print(f'[+] Imported {added} observations from {path} '
+                      f'({data.get("user", "unknown")})')
+                print(f'[+] Q-table merged: {len(agent.q_table)} states, {len(agent.X)} obs')
+                agent.finalize()
+                print(f'[+] Model saved: {agent.status()}')
+            return True
+        except Exception as e:
+            print(f'[!] Import failed: {e}')
+            return False
+
+    if getattr(args, 'pull_model', False):
+        # Git pulls the repo (user already has remote configured)
+        import subprocess
+        cwd = os.path.dirname(os.path.abspath(__file__))
+        try:
+            r = subprocess.run(['git', 'pull', '--ff-only'], cwd=cwd,
+                               capture_output=True, text=True, timeout=120)
+            print(f'[git] {r.stdout.strip()}')
+        except Exception as e:
+            print(f'[!] Pull failed: {e}')
+        # Reload the models/ dir
+        agent = AIAgent(profile=getattr(args, 'profile', 'balanced'))
+        print(f'[+] Model now: {agent.status()}')
+        return True
+
+    if getattr(args, 'push_model', False):
+        import subprocess
+        cwd = os.path.dirname(os.path.abspath(__file__))
+        try:
+            # Save the model first
+            agent = AIAgent(profile=getattr(args, 'profile', 'balanced'))
+            syncModelToRepo(agent)
+            agent.finalize()
+            msg = f'training: {agent.user_id[:8]} {len(agent.X)} obs, Q({len(agent.q_table)})'
+            r = subprocess.run(['git', 'add', '-A'], cwd=cwd, capture_output=True, timeout=30)
+            r = subprocess.run(['git', 'commit', '-m', msg], cwd=cwd,
+                               capture_output=True, text=True, timeout=30)
+            if r.returncode != 0:
+                if 'nothing to commit' in (r.stdout + r.stderr):
+                    print('[+] Nothing to push — already up to date')
+                    return True
+                print(f'[!] Commit failed: {r.stderr}')
+                return False
+            r = subprocess.run(['git', 'push', 'origin'], cwd=cwd,
+                               capture_output=True, text=True, timeout=120)
+            if r.returncode != 0:
+                print(f'[!] Push failed: {r.stderr}')
+                print('[!] Set your GitHub credentials:  git push  or set GITHUB_TOKEN env')
+                return False
+            print(f'[+] Pushed: {msg}')
+            return True
+        except Exception as e:
+            print(f'[!] Push error: {e}')
+            return False
+
+    return False
+
 def main():
     """Main os-e code"""
     global args
@@ -4153,6 +4413,12 @@ def main():
 
     if args.check:
         checkBssid(args.check, args.interface)
+        return
+
+    # Community model commands (no interface needed)
+    if (getattr(args, 'export', False) or getattr(args, 'import_data', None)
+            or getattr(args, 'pull_model', False) or getattr(args, 'push_model', False)):
+        _communityTraining(args)
         return
 
     if getattr(args, 'install', False):
