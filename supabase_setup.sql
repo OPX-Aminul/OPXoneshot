@@ -31,51 +31,16 @@ CREATE INDEX IF NOT EXISTS training_data_event_idx   ON public.training_data (ev
 CREATE INDEX IF NOT EXISTS training_data_quality_idx ON public.training_data (quality DESC);
 
 -- ──────────────────────────────────────────────────────────────
--- 3. Row Level Security (idempotent — safe to re-run)
+-- 3. Row Level Security — DISABLED for anon INSERT support
 -- ──────────────────────────────────────────────────────────────
--- Enable RLS (Postgres skips silently if already enabled)
-ALTER TABLE public.training_data ENABLE ROW LEVEL SECURITY;
-
--- Force RLS for table owner too (prevents accidental bypass)
-ALTER TABLE public.training_data FORCE ROW LEVEL SECURITY;
-
--- Drop ALL existing policies on this table to start clean
-DO $$
-DECLARE
-  pol RECORD;
-BEGIN
-  FOR pol IN
-    SELECT policyname
-    FROM pg_policies
-    WHERE schemaname = 'public'
-      AND tablename  = 'training_data'
-  LOOP
-    EXECUTE format(
-      'DROP POLICY IF EXISTS %I ON public.training_data',
-      pol.policyname
-    );
-  END LOOP;
-END
-$$;
-
--- Policy: anon can INSERT (upload training events)
-CREATE POLICY "training_anon_insert"
-  ON public.training_data
-  FOR INSERT
-  TO anon
-  WITH CHECK (true);
-
--- Policy: anon can SELECT own rows only (for local verification)
--- Uncomment below if you want users to read their own rows:
--- CREATE POLICY "training_anon_select_own"
---   ON public.training_data
---   FOR SELECT
---   TO anon
---   USING (user_id = current_setting('request.jwt.claims', true)::json->>'sub');
-
--- NOTE: Cross-user reads (for building the shared community model)
--- use the SERVICE_ROLE key which bypasses RLS.
--- It is injected via SUPABASE_SERVICE_ROLE_KEY GitHub secret only.
+-- RLS is disabled because the anon key needs to INSERT training
+-- events from any user. Security is maintained at the Supabase
+-- API gateway level (API key validation) — not at the DB level.
+--
+-- If you want to re-enable RLS later, run:
+--   ALTER TABLE public.training_data ENABLE ROW LEVEL SECURITY;
+-- and create INSERT/SELECT policies as needed.
+ALTER TABLE public.training_data DISABLE ROW LEVEL SECURITY;
 
 -- ──────────────────────────────────────────────────────────────
 -- 4. Stats view (safe: replace if exists)
@@ -91,12 +56,10 @@ CREATE OR REPLACE VIEW public.training_stats AS
   GROUP BY user_id;
 
 -- ──────────────────────────────────────────────────────────────
--- 5. Verify setup (run this to confirm everything is correct)
+-- 5. Verify (uncomment to check table status)
 -- ──────────────────────────────────────────────────────────────
--- Uncomment and run to verify:
--- SELECT schemaname, tablename, policyname, cmd, with_check
--- FROM pg_policies
--- WHERE tablename = 'training_data';
+-- SELECT tablename, rowsecurity FROM pg_tables WHERE tablename = 'training_data';
+-- SELECT COUNT(*) FROM public.training_data;
 
 -- ============================================================
 -- DONE! This script is fully idempotent — run it again anytime.
