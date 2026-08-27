@@ -4,7 +4,7 @@
   "dataset_version": "d2000",
   "event_count": 1035,
   "cross_val_accuracy": 0.0,
-  "trained_at": "2026-08-27T18:39:45Z",
+  "trained_at": "2026-08-27T19:21:08Z",
   "training_mode": "smart_retrain_v2",
   "class_balance": {
     "proceed": 270,

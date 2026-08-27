@@ -5678,6 +5678,252 @@ class ResilienceManager:
     def status(self):
         return f'Resilience(recoveries={self._recovery_count}, errors={len(self._error_history)}, consecutive={self._consecutive_errors})'
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# FINAL TRAINING: Mathematical Reasoning + Code Intelligence + Error Interpretation
+# ═══════════════════════════════════════════════════════════════════════════
+
+class MathematicalReasoning:
+    """Brain's mathematical/logical reasoning engine.
+    
+    Enables the AI to:
+    - Calculate probabilities and statistical inferences
+ - Solve optimization problems (find best delay, best strategy)
+    - Understand numerical patterns in attack results
+    - Reason about signal strength, timing, and success rates
+    """
+    def __init__(self):
+        self._calc_cache = {}
+        self._pattern_db = {}
+
+    def probability(self, success_count: int, total_count: int) -> float:
+        """Calculate success probability with Laplace smoothing."""
+        return (success_count + 1) / (total_count + 2) if total_count > 0 else 0.5
+
+    def expected_value(self, outcomes: list) -> float:
+        """Calculate expected value of a set of outcomes."""
+        if not outcomes:
+            return 0.0
+        return sum(outcomes) / len(outcomes)
+
+    def bayesian_update(self, prior: float, likelihood: float, evidence: float) -> float:
+        """Bayesian probability update given new evidence."""
+        if evidence == 0:
+            return prior
+        return (likelihood * prior) / evidence
+
+    def optimize_delay(self, success_rates: dict) -> float:
+        """Find optimal delay using expected reward maximization."""
+        if not success_rates:
+            return 1.0
+        best_delay = max(success_rates.keys(), key=lambda d: success_rates[d])
+        return best_delay
+
+    def detect_pattern(self, sequence: list) -> str:
+        """Detect patterns in attack result sequences."""
+        if len(sequence) < 3:
+            return 'insufficient_data'
+        recent = sequence[-5:]
+        if all(x == recent[0] for x in recent):
+            return 'consistent_' + str(recent[0])
+        ups = sum(1 for i in range(1, len(recent)) if recent[i] > recent[i-1])
+        downs = sum(1 for i in range(1, len(recent)) if recent[i] < recent[i-1])
+        if ups > downs:
+            return 'improving'
+        elif downs > ups:
+            return 'degrading'
+        return 'oscillating'
+
+    def calculate_optimal_strategy(self, stats: dict) -> dict:
+        """Calculate optimal attack strategy based on statistics."""
+        strategies = {}
+        for action, data in stats.items():
+            total = data.get('success', 0) + data.get('fail', 0)
+            if total > 0:
+                rate = data['success'] / total
+                confidence = self.probability(data['success'], total)
+                strategies[action] = {
+                    'rate': rate,
+                    'confidence': confidence,
+                    'recommendation': 'try' if rate > 0.3 else 'avoid',
+                }
+        return strategies
+
+    def status(self):
+        return f'MathReasoning({len(self._calc_cache)} cached, {len(self._pattern_db)} patterns)'
+
+
+class CodeIntelligence:
+    """Brain's code/script understanding and generation capability.
+    
+    Enables the AI to:
+    - Parse and understand shell commands
+    - Generate simple scripts for automation
+    - Understand error messages and suggest fixes
+    - Interpret tool outputs (pixiewps, reaver, bully)
+    """
+    def __init__(self):
+        self._known_errors = {
+            'timeout': {'cause': 'Router not responding', 'fix': 'Increase timeout or reduce speed'},
+            'locked': {'cause': 'WPS lock triggered', 'fix': 'Wait for lock to clear'},
+            'no device': {'cause': 'Interface not found', 'fix': 'Check adapter connection'},
+            'denied': {'cause': 'Permission required', 'fix': 'Run with sudo'},
+            'pixiewps': {'cause': 'Pixie Dust failed', 'fix': 'Try online bruteforce instead'},
+            'e9': {'cause': 'WPS error E9', 'fix': 'Router may have rate limiting'},
+        }
+
+    def interpret_tool_output(self, tool: str, output: str) -> dict:
+        """Interpret output from security tools."""
+        result = {'tool': tool, 'findings': [], 'action': 'continue'}
+        output_lower = output.lower()
+
+        if tool == 'pixiewps':
+            if 'wps pin' in output_lower or 'pin:' in output_lower:
+                result['findings'].append('PIN FOUND')
+                result['action'] = 'connect_with_pin'
+            elif 'not vulnerable' in output_lower:
+                result['findings'].append('Not vulnerable to Pixie Dust')
+                result['action'] = 'try_bruteforce'
+            elif 'timeout' in output_lower:
+                result['findings'].append('Pixie Dust timeout')
+                result['action'] = 'retry_or_skip'
+
+        elif tool == 'reaver':
+            if 'wps pin' in output_lower:
+                result['findings'].append('PIN cracked')
+                result['action'] = 'connect_with_pin'
+            elif 'locked' in output_lower:
+                result['findings'].append('WPS locked')
+                result['action'] = 'wait_and_retry'
+            elif 'failed' in output_lower:
+                result['findings'].append('Attack failed')
+                result['action'] = 'try_alternative'
+
+        elif tool == 'bully':
+            if 'pin' in output_lower and ('found' in output_lower or 'success' in output_lower):
+                result['findings'].append('PIN found')
+                result['action'] = 'connect_with_pin'
+            elif 'exhausted' in output_lower:
+                result['findings'].append('All PINs exhausted')
+                result['action'] = 'give_up'
+
+        return result
+
+    def suggest_fix(self, error_msg: str) -> str:
+        """Suggest fix for a given error message."""
+        error_lower = error_msg.lower()
+        for key, info in self._known_errors.items():
+            if key in error_lower:
+                return f'Cause: {info["cause"]}. Fix: {info["fix"]}'
+        return f'Unknown error. Try: check logs, verify adapter, restart tool'
+
+    def generate_sync_script(self) -> str:
+        """Generate a sync script for community learning."""
+        return """#!/bin/bash
+# OPXoneshot Community Sync
+echo "[*] Syncing community data..."
+python3 oneshot.py --sync
+echo "[*] Pulling latest model..."
+python3 oneshot.py --pull-model
+echo "[*] Done!"
+"""
+
+    def status(self):
+        return f'CodeIntel({len(self._known_errors)} known errors)'
+
+
+class ErrorInterpreter:
+    """Brain's error understanding and self-correction capability.
+    
+    Enables the AI to:
+    - Classify errors by type and severity
+    - Generate human-readable explanations
+    - Suggest recovery strategies
+    - Learn from recurring errors
+    """
+    def __init__(self):
+        self._error_log = []
+        self._error_patterns = {}
+        self._recovery_strategies = {
+            'network': ['retry_with_backoff', 'switch_interface', 'wait_and_retry'],
+            'permission': ['run_as_root', 'check_capabilities'],
+            'hardware': ['restart_adapter', 'check_driver', 'switch_usb_port'],
+            'software': ['reinstall_tool', 'update_version', 'check_dependencies'],
+            'target': ['switch_target', 'wait_for_reboot', 'try_different_method'],
+        }
+
+    def interpret(self, error: Exception) -> dict:
+        """Interpret an error and provide reasoning."""
+        err_str = str(error).lower()
+        category = 'unknown'
+        severity = 'low'
+        explanation = ''
+        recovery = []
+
+        # Classify
+        if any(x in err_str for x in ['network', 'connection', 'refused']):
+            category = 'network'
+            severity = 'medium'
+            explanation = 'Network connectivity issue — router may be blocking or unreachable'
+        elif any(x in err_str for x in ['permission', 'denied', 'root']):
+            category = 'permission'
+            severity = 'high'
+            explanation = 'Insufficient permissions — need root/sudo access'
+        elif any(x in err_str for x in ['interface', 'device', 'wlan']):
+            category = 'hardware'
+            severity = 'high'
+            explanation = 'WiFi adapter issue — device not found or driver problem'
+        elif any(x in err_str for x in ['timeout', 'timed out']):
+            category = 'network'
+            severity = 'medium'
+            explanation = 'Operation timed out — router may be slow or filtering'
+        elif any(x in err_str for x in ['import', 'module', 'dependency']):
+            category = 'software'
+            severity = 'high'
+            explanation = 'Missing dependency — install required packages'
+        else:
+            explanation = f'Unexpected error: {str(error)[:100]}'
+
+        recovery = self._recovery_strategies.get(category, ['retry'])
+
+        # Log
+        self._error_log.append({
+            'category': category,
+            'severity': severity,
+            'message': str(error)[:200],
+            'timestamp': time.time(),
+        })
+
+        # Track patterns
+        if category not in self._error_patterns:
+            self._error_patterns[category] = 0
+        self._error_patterns[category] += 1
+
+        return {
+            'category': category,
+            'severity': severity,
+            'explanation': explanation,
+            'recovery': recovery,
+            'occurrences': self._error_patterns.get(category, 0),
+        }
+
+    def should_panic(self) -> bool:
+        """Check if error rate is critical."""
+        recent = [e for e in self._error_log if time.time() - e.get('timestamp', 0) < 60]
+        return len(recent) > 10
+
+    def get_error_summary(self) -> dict:
+        """Get summary of all errors encountered."""
+        return {
+            'total': len(self._error_log),
+            'by_category': dict(self._error_patterns),
+            'recent_count': len([e for e in self._error_log if time.time() - e.get('timestamp', 0) < 300]),
+        }
+
+    def status(self):
+        return f'ErrorInterpreter({len(self._error_log)} errors, {len(self._error_patterns)} categories)'
+
+
 class DQNetwork:
     _DIR = os.path.join(os.path.expanduser('~'), '.OneShot-Extended')
     _STATE_FILE = os.path.join(_DIR, 'dqn_state.pkl')
@@ -5896,6 +6142,12 @@ class AIAgent:
         self.cve_parser = CVEParser()
         # ADVANCEMENT 10: Resilience Manager
         self.resilience = ResilienceManager()
+        # FINAL: Mathematical Reasoning
+        self.math_brain = MathematicalReasoning()
+        # FINAL: Code Intelligence
+        self.code_intel = CodeIntelligence()
+        # FINAL: Error Interpreter
+        self.error_interpreter = ErrorInterpreter()
 
         if len(self.X) < 5:
             self._pretrain()
@@ -6502,6 +6754,9 @@ class AIAgent:
         parts.append(f'CoT({len(self.cognition._thought_log)} thoughts)')
         parts.append(f'Mem({len(self.cognition.episodic_memory)})')
         parts.append(f'Resilience({self.resilience._recovery_count} rec)')
+        parts.append(f'Math🧠')
+        parts.append(f'Code🧠')
+        parts.append(f'ErrInterpreter🧠')
         if not parts:
             parts.append('heuristic')
         return f'AI Agent ready ({", ".join(parts)}, {len(self.X)} obs)'
