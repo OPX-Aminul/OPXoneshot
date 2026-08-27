@@ -1,58 +1,108 @@
 -- ============================================================
--- OneShot AI — Supabase setup
--- Run this ONCE in your Supabase Dashboard SQL Editor:
+-- OneShot AI — Supabase setup (IDEMPOTENT)
+-- Safe to run MULTIPLE times — creates or overwrites cleanly.
 --   https://supabase.com/dashboard -> your project -> SQL Editor
 -- ============================================================
 
--- 1. Create the training data table
-create table if not exists public.training_data (
-  id         bigint generated always as identity primary key,
-  event_id   text unique,   -- idempotent key, prevents duplicate uploads (plan §27)
-  user_id    text not null,
-  signal     numeric,
-  locked     boolean,
-  action     text,
-  success    boolean,
-  reward     numeric,
-  quality    numeric,       -- 0..1 derived quality score (plan §7)
-  profile    text,
-  v          text,   -- oneshot version / model version
-  ts         timestamptz not null default now()
+-- ──────────────────────────────────────────────────────────────
+-- 1. Training data table (safe: create if missing)
+-- ──────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.training_data (
+  id         BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  event_id   TEXT UNIQUE,
+  user_id    TEXT NOT NULL,
+  signal     NUMERIC,
+  locked     BOOLEAN,
+  action     TEXT,
+  success    BOOLEAN,
+  reward     NUMERIC,
+  quality    NUMERIC,
+  profile    TEXT,
+  v          TEXT,
+  ts         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-create index if not exists training_data_user_idx on public.training_data (user_id);
-create index if not exists training_data_ts_idx   on public.training_data (ts desc);
-create index if not exists training_data_event_idx on public.training_data (event_id);
-create index if not exists training_data_quality_idx on public.training_data (quality desc);
+-- ──────────────────────────────────────────────────────────────
+-- 2. Indexes (safe: create if missing, skip if exists)
+-- ──────────────────────────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS training_data_user_idx    ON public.training_data (user_id);
+CREATE INDEX IF NOT EXISTS training_data_ts_idx      ON public.training_data (ts DESC);
+CREATE INDEX IF NOT EXISTS training_data_event_idx   ON public.training_data (event_id);
+CREATE INDEX IF NOT EXISTS training_data_quality_idx ON public.training_data (quality DESC);
 
--- 2. Row Level Security
---    PRIVACY (plan §32): anon may only INSERT its own events. Cross-user reads
---    (for building the shared community model) must use the SERVICE_ROLE key,
---    which bypasses RLS and is only used in CI (.github/workflows) and never
---    shipped in client code.
-alter table public.training_data enable row level security;
+-- ──────────────────────────────────────────────────────────────
+-- 3. Row Level Security (idempotent — safe to re-run)
+-- ──────────────────────────────────────────────────────────────
+-- Enable RLS (Postgres skips silently if already enabled)
+ALTER TABLE public.training_data ENABLE ROW LEVEL SECURITY;
 
-drop policy if exists "training_anon_insert" on public.training_data;
-create policy "training_anon_insert"
-  on public.training_data for insert
-  to anon with check (true);
+-- Force RLS for table owner too (prevents accidental bypass)
+ALTER TABLE public.training_data FORCE ROW LEVEL SECURITY;
 
--- NOTE: intentionally NO anon SELECT policy. If you want a fully public
--- read-only mirror for debugging, add one explicitly — but it is discouraged.
+-- Drop ALL existing policies on this table to start clean
+DO $$
+DECLARE
+  pol RECORD;
+BEGIN
+  FOR pol IN
+    SELECT policyname
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename  = 'training_data'
+  LOOP
+    EXECUTE format(
+      'DROP POLICY IF EXISTS %I ON public.training_data',
+      pol.policyname
+    );
+  END LOOP;
+END
+$$;
 
--- 3. Optional view: aggregated community stats by user
-create or replace view public.training_stats as
-  select user_id,
-         count(*)                       as attempts,
-         count(*) filter (where success) as successes,
-         round(avg(reward), 3)          as avg_reward,
-         max(ts)                         as last_ts
-  from public.training_data
-  group by user_id;
+-- Policy: anon can INSERT (upload training events)
+CREATE POLICY "training_anon_insert"
+  ON public.training_data
+  FOR INSERT
+  TO anon
+  WITH CHECK (true);
+
+-- Policy: anon can SELECT own rows only (for local verification)
+-- Uncomment below if you want users to read their own rows:
+-- CREATE POLICY "training_anon_select_own"
+--   ON public.training_data
+--   FOR SELECT
+--   TO anon
+--   USING (user_id = current_setting('request.jwt.claims', true)::json->>'sub');
+
+-- NOTE: Cross-user reads (for building the shared community model)
+-- use the SERVICE_ROLE key which bypasses RLS.
+-- It is injected via SUPABASE_SERVICE_ROLE_KEY GitHub secret only.
+
+-- ──────────────────────────────────────────────────────────────
+-- 4. Stats view (safe: replace if exists)
+-- ──────────────────────────────────────────────────────────────
+CREATE OR REPLACE VIEW public.training_stats AS
+  SELECT
+    user_id,
+    COUNT(*)                             AS attempts,
+    COUNT(*) FILTER (WHERE success)      AS successes,
+    ROUND(AVG(reward), 3)                AS avg_reward,
+    MAX(ts)                              AS last_ts
+  FROM public.training_data
+  GROUP BY user_id;
+
+-- ──────────────────────────────────────────────────────────────
+-- 5. Verify setup (run this to confirm everything is correct)
+-- ──────────────────────────────────────────────────────────────
+-- Uncomment and run to verify:
+-- SELECT schemaname, tablename, policyname, cmd, with_check
+-- FROM pg_policies
+-- WHERE tablename = 'training_data';
 
 -- ============================================================
--- Usage after setup:
---   sudo python3 oneshot.py --sync          # push local + pull community + auto-train + git push
---   sudo python3 oneshot.py --push-data     # only upload local training log
---   sudo python3 oneshot.py --pull-data     # only download community rows
+-- DONE! This script is fully idempotent — run it again anytime.
+--
+-- Usage:
+--   python3 oneshot.py --sync      # push local + pull + retrain + git push
+--   python3 oneshot.py --push-data  # upload local training log
+--   python3 oneshot.py --pull-data  # download community rows
 -- ============================================================
