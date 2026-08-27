@@ -1,0 +1,3389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Agent Training Dashboard - OneShot-Extended WPS</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a0f;--bg2:#12121a;--bg3:#1a1a2e;--bg4:#222240;--text:#e0e0e0;--accent:#00ff41;--accent2:#00cc33;--warn:#ff6b35;--danger:#ff3333;--success:#00ff41;--dim:#666;--border:#2a2a4a}
+body{background:var(--bg);color:var(--text);font-family:'Courier New',monospace;min-height:100vh;overflow-x:hidden}
+::-webkit-scrollbar{width:8px}
+::-webkit-scrollbar-track{background:var(--bg2)}
+::-webkit-scrollbar-thumb{background:var(--accent2);border-radius:4px}
+.header{padding:20px 30px;background:linear-gradient(135deg,var(--bg2),var(--bg3));border-bottom:2px solid var(--accent);position:relative;overflow:hidden}
+.header::before{content:'';position:absolute;top:0;left:-100%;width:200%;height:100%;background:linear-gradient(90deg,transparent,rgba(0,255,65,0.03),transparent);animation:headerSweep 8s infinite}
+@keyframes headerSweep{0%{transform:translateX(-50%)}100%{transform:translateX(50%)}}
+.header h1{font-size:24px;color:var(--accent);text-shadow:0 0 20px rgba(0,255,65,0.3);letter-spacing:4px;animation:textGlow 2s ease-in-out infinite alternate}
+@keyframes textGlow{from{text-shadow:0 0 20px rgba(0,255,65,0.3)}to{text-shadow:0 0 40px rgba(0,255,65,0.6),0 0 80px rgba(0,255,65,0.2)}}
+.header .subtitle{font-size:12px;color:var(--dim);margin-top:4px;letter-spacing:2px}
+.tabs{display:flex;background:var(--bg2);border-bottom:2px solid var(--border);overflow-x:auto;flex-wrap:nowrap}
+.tab{padding:12px 24px;cursor:pointer;color:var(--dim);font-size:13px;letter-spacing:1px;border-bottom:3px solid transparent;transition:all 0.3s;white-space:nowrap;user-select:none}
+.tab:hover{color:var(--text);background:var(--bg3)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);background:var(--bg3)}
+.tab-content{display:none;padding:20px 30px;animation:fadeIn 0.3s ease}
+.tab-content.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:16px}
+.card-title{font-size:14px;color:var(--accent);margin-bottom:12px;letter-spacing:1px;border-bottom:1px solid var(--border);padding-bottom:8px}
+.metrics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px}
+.metric-card{background:linear-gradient(135deg,var(--bg3),var(--bg2));border:1px solid var(--border);border-radius:6px;padding:16px;text-align:center;transition:transform 0.2s,border-color 0.2s}
+.metric-card:hover{transform:translateY(-2px);border-color:var(--accent2)}
+.metric-card .value{font-size:28px;font-weight:bold;color:var(--accent);margin:8px 0}
+.metric-card .label{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px}
+.status-dot{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px;animation:pulse 2s infinite}
+.status-dot.green{background:var(--success);box-shadow:0 0 10px var(--success)}
+.status-dot.yellow{background:#ffcc00;box-shadow:0 0 10px #ffcc00}
+.status-dot.red{background:var(--danger);box-shadow:0 0 10px var(--danger)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+canvas{display:block;max-width:100%}
+.chart-container{position:relative;margin:12px 0}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+@media(max-width:900px){.grid-2,.grid-3{grid-template-columns:1fr}}
+input[type=range]{-webkit-appearance:none;background:var(--bg4);height:6px;border-radius:3px;outline:none;width:100%}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 0 6px var(--accent)}
+select,button{background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px 12px;font-family:inherit;font-size:12px;cursor:pointer;transition:all 0.2s}
+select:hover,button:hover{border-color:var(--accent2)}
+button.primary{background:var(--accent2);color:#000;border-color:var(--accent);font-weight:bold}
+button.primary:hover{background:var(--accent);box-shadow:0 0 15px rgba(0,255,65,0.3)}
+button.danger{background:var(--danger);color:#fff;border-color:var(--danger)}
+button.danger:hover{background:#ff5555}
+.toggle-wrap{display:flex;align-items:center;gap:8px;font-size:12px}
+.toggle{position:relative;width:44px;height:22px;cursor:pointer}
+.toggle input{opacity:0;width:0;height:0}
+.toggle .slider{position:absolute;inset:0;background:var(--bg4);border-radius:11px;transition:0.3s}
+.toggle .slider::before{content:'';position:absolute;width:18px;height:18px;left:2px;top:2px;background:#666;border-radius:50%;transition:0.3s}
+.toggle input:checked+.slider{background:var(--accent2)}
+.toggle input:checked+.slider::before{transform:translateX(22px);background:#fff}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--border)}
+th{color:var(--accent);background:var(--bg3);position:sticky;top:0;cursor:pointer;user-select:none}
+th:hover{color:var(--accent2)}
+tr:hover{background:rgba(0,255,65,0.03)}
+.table-wrap{max-height:400px;overflow:auto;border:1px solid var(--border);border-radius:6px}
+.log-console{background:#000;color:var(--accent);font-size:11px;padding:12px;border-radius:6px;max-height:300px;overflow-y:auto;border:1px solid var(--border);font-family:'Courier New',monospace}
+.log-line{margin:2px 0;opacity:0;animation:logFade 0.3s forwards}
+@keyframes logFade{to{opacity:1}}
+.log-line.warn{color:var(--warn)}
+.log-line.err{color:var(--danger)}
+.log-line.info{color:#00ccff}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin:8px 0;font-size:11px}
+.legend-item{display:flex;align-items:center;gap:4px}
+.legend-color{width:12px;height:3px;border-radius:2px}
+.slider-range{display:flex;justify-content:space-between;font-size:10px;color:var(--dim);margin-top:4px}
+.empty{color:var(--dim);font-style:italic;text-align:center;padding:20px}
+</style>
+</head>
+<body>
+<div class="header">
+<h1>// AI AGENT TRAINING DASHBOARD</h1>
+<div class="subtitle">ONESHOT-EXTENDED WPS TOOL &mdash; MODEL TRAINING ANALYTICS</div>
+</div>
+
+<div class="tabs" id="tabs">
+<div class="tab active" data-tab="overview">OVERVIEW</div>
+<div class="tab" data-tab="training">TRAINING</div>
+<div class="tab" data-tab="qtable">Q-TABLE</div>
+<div class="tab" data-tab="features">FEATURES</div>
+<div class="tab" data-tab="scenarios">SCENARIOS</div>
+<div class="tab" data-tab="interactive">INTERACTIVE</div>
+</div>
+
+<div class="tab-content active" id="tab-overview"></div>
+<div class="tab-content" id="tab-training"></div>
+<div class="tab-content" id="tab-qtable"></div>
+<div class="tab-content" id="tab-features"></div>
+<div class="tab-content" id="tab-scenarios"></div>
+<div class="tab-content" id="tab-interactive"></div>
+
+<script>
+const DATA = {
+  "generated_at": "2026-08-27 05:10:43",
+  "model_version": "v2.0",
+  "total_features": 13,
+  "feature_names": [
+    "signal",
+    "wps_ver",
+    "wps_locked",
+    "is_vuln",
+    "attempt",
+    "timeouts",
+    "resp_delay",
+    "m_msgs",
+    "fails",
+    "sig_ok",
+    "oui",
+    "frame_loss",
+    "hist_locks"
+  ],
+  "actions": [
+    "proceed",
+    "wait",
+    "skip",
+    "abort"
+  ],
+  "scenarios": [
+    {
+      "type": "vuln_list",
+      "name": "Common default PIN (easy)",
+      "signal": -40,
+      "wps_ver": "1.0",
+      "locked": false,
+      "attempts": 1,
+      "success": true,
+      "success_rate": 0.95,
+      "wait": 0,
+      "resp": 0.5,
+      "m_msgs": 4
+    },
+    {
+      "type": "vuln_list",
+      "name": "Common default PIN (medium)",
+      "signal": -55,
+      "wps_ver": "2.0",
+      "locked": false,
+      "attempts": 2,
+      "success": true,
+      "success_rate": 0.8,
+      "wait": 3,
+      "resp": 1.0,
+      "m_msgs": 3
+    },
+    {
+      "type": "vuln_list",
+      "name": "Vendor default PIN (tight)",
+      "signal": -65,
+      "wps_ver": "1.0",
+      "locked": false,
+      "attempts": 3,
+      "success": true,
+      "success_rate": 0.6,
+      "wait": 5,
+      "resp": 1.5,
+      "m_msgs": 2
+    },
+    {
+      "type": "vuln_list",
+      "name": "Vuln list - locked AP",
+      "signal": -50,
+      "wps_ver": "2.0",
+      "locked": true,
+      "attempts": 5,
+      "success": false,
+      "success_rate": 0.0,
+      "wait": 8,
+      "resp": 0.8,
+      "m_msgs": 1
+    },
+    {
+      "type": "vuln_list",
+      "name": "Vuln list - disabled WPS",
+      "signal": -45,
+      "wps_ver": "2.0",
+      "locked": false,
+      "attempts": 2,
+      "success": false,
+      "success_rate": 0.0,
+      "wait": 0,
+      "resp": 2.0,
+      "m_msgs": 0
+    },
+    {
+      "type": "pixie_dust",
+      "name": "Pixie Dust - real vuln",
+      "signal": -35,
+      "wps_ver": "2.0",
+      "locked": false,
+      "attempts": 1,
+      "success": true,
+      "success_rate": 0.9,
+      "wait": 0,
+      "resp": 0.3,
+      "m_msgs": 6
+    },
+    {
+      "type": "pixie_dust",
+      "name": "Pixie Dust - marginal vuln",
+      "signal": -55,
+      "wps_ver": "1.0",
+      "locked": false,
+      "attempts": 3,
+      "success": true,
+      "success_rate": 0.55,
+      "wait": 5,
+      "resp": 2.0,
+      "m_msgs": 4
+    },
+    {
+      "type": "pixie_dust",
+      "name": "Pixie Dust - weak signal",
+      "signal": -78,
+      "wps_ver": "2.0",
+      "locked": false,
+      "attempts": 5,
+      "success": false,
+      "success_rate": 0.1,
+      "wait": 10,
+      "resp": 3.5,
+      "m_msgs": 2
+    },
+    {
+      "type": "pixie_dust",
+      "name": "Pixie Dust - not vuln",
+      "signal": -50,
+      "wps_ver": "2.0",
+      "locked": false,
+      "attempts": 4,
+      "success": false,
+      "success_rate": 0.0,
+      "wait": 8,
+      "resp": 2.5,
+      "m_msgs": 1
+    },
+    {
+      "type": "pixie_dust",
+      "name": "Pixie Dust - locked",
+      "signal": -42,
+      "wps_ver": "1.0",
+      "locked": true,
+      "attempts": 2,
+      "success": false,
+      "success_rate": 0.0,
+      "wait": 5,
+      "resp": 1.0,
+      "m_msgs": 0
+    },
+    {
+      "type": "bruteforce",
+      "name": "Full bruteforce - good sig",
+      "signal": -40,
+      "wps_ver": "1.0",
+      "locked": false,
+      "attempts": 11000,
+      "success": true,
+      "success_rate": 0.85,
+      "wait": 0,
+      "resp": 0.8,
+      "m_msgs": 6
+    },
+    {
+      "type": "bruteforce",
+      "name": "Full bruteforce - fair sig",
+      "signal": -60,
+      "wps_ver": "2.0",
+      "locked": false,
+      "attempts": 11000,
+      "success": true,
+      "success_rate": 0.65,
+      "wait": 10,
+      "resp": 1.5,
+      "m_msgs": 4
+    },
+    {
+      "type": "bruteforce",
+      "name": "Full bruteforce - weak sig",
+      "signal": -75,
+      "wps_ver": "1.0",
+      "locked": false,
+      "attempts": 11000,
+      "success": false,
+      "success_rate": 0.15,
+      "wait": 30,
+      "resp": 3.0,
+      "m_msgs": 2
+    },
+    {
+      "type": "bruteforce",
+      "name": "Full bruteforce - locked",
+      "signal": -45,
+      "wps_ver": "2.0",
+      "locked": true,
+      "attempts": 11000,
+      "success": false,
+      "success_rate": 0.0,
+      "wait": 15,
+      "resp": 0.5,
+      "m_msgs": 0
+    },
+    {
+      "type": "bruteforce",
+      "name": "Full bruteforce - timeout loop",
+      "signal": -80,
+      "wps_ver": "1.0",
+      "locked": false,
+      "attempts": 11000,
+      "success": false,
+      "success_rate": 0.05,
+      "wait": 60,
+      "resp": 5.0,
+      "m_msgs": 0
+    },
+    {
+      "type": "exhaustive",
+      "name": "Exhaustive - all correct",
+      "signal": -38,
+      "wps_ver": "2.0",
+      "locked": false,
+      "attempts": 11000,
+      "success": true,
+      "success_rate": 0.9,
+      "wait": 0,
+      "resp": 0.5,
+      "m_msgs": 6
+    },
+    {
+      "type": "exhaustive",
+      "name": "Exhaustive - marginal",
+      "signal": -58,
+      "wps_ver": "1.0",
+      "locked": false,
+      "attempts": 8000,
+      "success": true,
+      "success_rate": 0.5,
+      "wait": 15,
+      "resp": 2.0,
+      "m_msgs": 3
+    },
+    {
+      "type": "exhaustive",
+      "name": "Exhaustive - bad signal",
+      "signal": -72,
+      "wps_ver": "2.0",
+      "locked": false,
+      "attempts": 11000,
+      "success": false,
+      "success_rate": 0.08,
+      "wait": 45,
+      "resp": 4.0,
+      "m_msgs": 1
+    },
+    {
+      "type": "exhaustive",
+      "name": "Exhaustive - lockout mid",
+      "signal": -48,
+      "wps_ver": "1.0",
+      "locked": true,
+      "attempts": 3000,
+      "success": false,
+      "success_rate": 0.0,
+      "wait": 20,
+      "resp": 1.0,
+      "m_msgs": 2
+    },
+    {
+      "type": "exhaustive",
+      "name": "Exhaustive - disabled",
+      "signal": -52,
+      "wps_ver": "2.0",
+      "locked": false,
+      "attempts": 200,
+      "success": false,
+      "success_rate": 0.0,
+      "wait": 0,
+      "resp": 2.0,
+      "m_msgs": 0
+    },
+    {
+      "adversarial": true,
+      "type": "vuln_list",
+      "name": "Adversarial: v6 locked + high signal (trap)",
+      "signal": -35,
+      "wps_ver": "6.0",
+      "locked": true,
+      "attempts": 1,
+      "success": false,
+      "success_rate": 0.0,
+      "wait": 0,
+      "resp": 0.1,
+      "m_msgs": 5
+    },
+    {
+      "adversarial": true,
+      "type": "pixie_dust",
+      "name": "Adversarial: many timeouts + low signal (abort)",
+      "signal": -82,
+      "wps_ver": "2.0",
+      "locked": false,
+      "attempts": 6,
+      "success": false,
+      "success_rate": 0.0,
+      "wait": 60,
+      "resp": 5.0,
+      "m_msgs": 0
+    },
+    {
+      "adversarial": true,
+      "type": "vuln_list",
+      "name": "Adversarial: v1 unlocked + good signal (easy win)",
+      "signal": -38,
+      "wps_ver": "1.0",
+      "locked": false,
+      "attempts": 1,
+      "success": true,
+      "success_rate": 0.95,
+      "wait": 0,
+      "resp": 0.2,
+      "m_msgs": 4
+    },
+    {
+      "adversarial": true,
+      "type": "bruteforce",
+      "name": "Adversarial: massive waits (abort path)",
+      "signal": -70,
+      "wps_ver": "2.0",
+      "locked": false,
+      "attempts": 9000,
+      "success": false,
+      "success_rate": 0.02,
+      "wait": 120,
+      "resp": 6.0,
+      "m_msgs": 0
+    },
+    {
+      "adversarial": true,
+      "type": "exhaustive",
+      "name": "Adversarial: v1 locked + high msgs (confuse)",
+      "signal": -40,
+      "wps_ver": "1.0",
+      "locked": true,
+      "attempts": 500,
+      "success": false,
+      "success_rate": 0.0,
+      "wait": 10,
+      "resp": 0.5,
+      "m_msgs": 6
+    }
+  ],
+  "chains": [
+    {
+      "name": "Perfect hunt",
+      "steps": [
+        1,
+        6,
+        11,
+        16
+      ],
+      "final": true
+    },
+    {
+      "name": "Default PIN fail",
+      "steps": [
+        4,
+        9
+      ],
+      "final": false
+    },
+    {
+      "name": "Slow locked discovery",
+      "steps": [
+        10,
+        19
+      ],
+      "final": false
+    },
+    {
+      "name": "Good signal full",
+      "steps": [
+        23,
+        6,
+        11
+      ],
+      "final": true
+    },
+    {
+      "name": "Adversarial trap",
+      "steps": [
+        21,
+        22,
+        24
+      ],
+      "final": false
+    },
+    {
+      "name": "Signal degrades",
+      "steps": [
+        1,
+        2,
+        7,
+        8
+      ],
+      "final": false
+    },
+    {
+      "name": "Lockout cascade",
+      "steps": [
+        3,
+        10,
+        14,
+        19
+      ],
+      "final": false
+    },
+    {
+      "name": "Quick win",
+      "steps": [
+        23
+      ],
+      "final": true
+    },
+    {
+      "name": "Exhaustive patience",
+      "steps": [
+        16,
+        17
+      ],
+      "final": true
+    },
+    {
+      "name": "Disabled discovery",
+      "steps": [
+        5,
+        20
+      ],
+      "final": false
+    }
+  ],
+  "metrics": {
+    "heuristic": {
+      "cumulative_reward": [
+        -1.0200000000000002,
+        -1.12,
+        -0.6700000000000002,
+        -0.7000000000000003,
+        0.8,
+        1.0,
+        -0.9400000000000002,
+        -0.7100000000000002,
+        1.0,
+        -0.8600000000000003,
+        -0.4800000000000001,
+        -1.1400000000000001,
+        -0.75,
+        1.0,
+        -0.9400000000000003,
+        1.0,
+        -1.7400000000000004,
+        -0.45000000000000007,
+        -0.85,
+        -0.8600000000000003,
+        -1.1,
+        0.8,
+        -0.7000000000000003,
+        -0.7800000000000002,
+        -0.6000000000000003,
+        1.0,
+        0.8,
+        -0.8600000000000003,
+        1.0,
+        0.8,
+        -0.65,
+        1.0,
+        -0.55,
+        -0.7800000000000002,
+        -1.8000000000000005,
+        -0.65,
+        1.0,
+        -1.4200000000000002,
+        1.0,
+        -1.6800000000000004,
+        -0.7600000000000002,
+        1.0,
+        -0.7800000000000002,
+        -0.7000000000000003,
+        -1.0200000000000002,
+        1.0,
+        -0.45000000000000007,
+        -0.7000000000000003,
+        -1.04,
+        1.0,
+        -1.2200000000000002,
+        -0.7800000000000002,
+        -0.6200000000000002,
+        0.9,
+        -0.85,
+        0.8,
+        -0.8000000000000002,
+        -0.7900000000000001,
+        -1.4400000000000002,
+        -0.56,
+        0.8,
+        -0.55,
+        1.0,
+        -1.36,
+        -1.12,
+        -1.32,
+        -0.7000000000000003,
+        -0.7000000000000003,
+        -1.04,
+        -0.9400000000000003,
+        1.0,
+        -0.45000000000000007,
+        -0.7800000000000002,
+        1.0,
+        1.0,
+        -0.8600000000000003,
+        -1.28,
+        1.0,
+        1.0,
+        -0.9400000000000003,
+        -0.6200000000000002,
+        -0.7800000000000002,
+        -0.9400000000000003,
+        1.0,
+        -1.2,
+        -0.45000000000000007,
+        1.0,
+        -1.8400000000000005,
+        1.0,
+        -1.1,
+        -1.28,
+        -0.7000000000000003,
+        -1.8000000000000005,
+        -0.6200000000000002,
+        -0.7800000000000002,
+        1.0,
+        -0.55,
+        -1.26,
+        1.0,
+        0.8,
+        -0.65,
+        -0.9000000000000002,
+        1.0,
+        -0.7400000000000002,
+        -0.65,
+        -1.08,
+        0.8,
+        -0.95,
+        -0.7800000000000002,
+        1.0,
+        -0.7000000000000003,
+        1.0,
+        -1.28,
+        1.0,
+        1.0,
+        -1.5800000000000003,
+        -2.0000000000000004,
+        -0.65,
+        1.0,
+        -0.7800000000000002,
+        -0.7800000000000002,
+        -0.7800000000000002,
+        -1.1800000000000002,
+        -1.7200000000000004,
+        -0.65,
+        -0.8600000000000003,
+        1.0,
+        -0.7800000000000002,
+        0.8,
+        1.0,
+        1.0,
+        -1.28,
+        -0.8600000000000003,
+        -0.75,
+        -0.95,
+        0.8,
+        0.8,
+        1.1,
+        -1.34,
+        -1.2,
+        -0.45000000000000007,
+        1.0,
+        -0.6200000000000002,
+        1.0,
+        0.8,
+        -0.9400000000000003,
+        -0.7000000000000003,
+        -0.7000000000000003,
+        0.9,
+        -0.7100000000000003,
+        -0.8400000000000002,
+        1.0,
+        -0.9200000000000002,
+        1.0,
+        1.0,
+        1.0,
+        -0.6800000000000002,
+        -0.5200000000000001,
+        -0.95,
+        -1.08,
+        -0.95,
+        1.0,
+        -0.6000000000000002,
+        -0.6000000000000002,
+        -0.85,
+        -1.0,
+        -0.6000000000000002,
+        -0.6000000000000002,
+        -1.08,
+        -0.9200000000000002,
+        -0.6800000000000002,
+        -0.6800000000000002,
+        -0.5200000000000001,
+        -0.6800000000000002,
+        1.0,
+        1.0,
+        -0.65,
+        1.0,
+        -0.6000000000000002,
+        1.0
+      ],
+      "success_rate": [
+        0.0,
+        0.2727272727272727,
+        0.23809523809523808,
+        0.3225806451612903,
+        0.3170731707317073,
+        0.32,
+        0.32,
+        0.32,
+        0.3,
+        0.3,
+        0.3,
+        0.3,
+        0.34,
+        0.34,
+        0.34
+      ],
+      "avg_rounds": [
+        20,
+        20,
+        20,
+        6,
+        20,
+        20,
+        3,
+        1,
+        20,
+        20,
+        6,
+        20,
+        20,
+        1,
+        4
+      ],
+      "actions_distribution": {
+        "proceed": 0,
+        "wait": 0,
+        "skip": 0,
+        "abort": 0
+      },
+      "feature_importance": [],
+      "final_stats": {
+        "total_episodes": 180,
+        "avg_reward": -0.2811000000000001,
+        "max_reward": 1.1,
+        "min_reward": -2.0000000000000004
+      },
+      "q_table_snapshots": []
+    },
+    "adaptive": {
+      "cumulative_reward": [
+        -0.38999999999999996,
+        -0.45999999999999996,
+        -0.30000000000000004,
+        -0.4000000000000001,
+        0.8,
+        1.0,
+        -0.30000000000000004,
+        -0.35,
+        1.0,
+        -0.4000000000000001,
+        -0.30000000000000004,
+        -0.4000000000000001,
+        -0.4000000000000001,
+        1.0,
+        -0.2,
+        1.0,
+        -0.4000000000000001,
+        -0.4000000000000001,
+        -0.4000000000000001,
+        -0.4000000000000001,
+        -0.4000000000000001,
+        0.8,
+        -0.4000000000000001,
+        -0.4000000000000001,
+        -0.45000000000000007,
+        1.0,
+        -0.04999999999999999,
+        -0.45000000000000007,
+        1.0,
+        -0.25,
+        -0.4000000000000001,
+        0.8,
+        -0.4000000000000001,
+        -0.4000000000000001,
+        -0.24,
+        -0.4000000000000001,
+        1.0,
+        -0.4000000000000001,
+        1.0,
+        -0.2,
+        -0.35,
+        -0.04999999999999999,
+        -0.4000000000000001,
+        -0.4000000000000001,
+        -0.4000000000000001,
+        1.0,
+        -0.4000000000000001,
+        -0.4000000000000001,
+        -0.2,
+        1.0,
+        -0.04999999999999999,
+        -0.4000000000000001,
+        -0.4000000000000001,
+        1.1,
+        -0.4000000000000001,
+        -0.25,
+        -0.04999999999999999,
+        -0.25,
+        -0.2,
+        -0.25,
+        0.8,
+        -0.4000000000000001,
+        1.0,
+        -0.2,
+        -0.2,
+        -0.25,
+        -0.4000000000000001,
+        -0.4000000000000001,
+        -0.2,
+        -0.4000000000000001,
+        1.0,
+        -0.4000000000000001,
+        -0.4000000000000001,
+        1.0,
+        1.0,
+        -0.4000000000000001,
+        -0.2,
+        1.0,
+        1.0,
+        -0.4000000000000001,
+        -0.4000000000000001,
+        -0.4000000000000001,
+        -0.4000000000000001,
+        1.0,
+        -0.35,
+        -0.42999999999999994,
+        1.0,
+        -0.2,
+        1.0,
+        -0.35,
+        -0.2,
+        -0.15,
+        -0.04999999999999999,
+        -0.15,
+        -0.30000000000000004,
+        1.0,
+        -0.15,
+        -0.4000000000000001,
+        -0.25,
+        0.8,
+        -0.15,
+        -0.25,
+        1.0,
+        -0.4000000000000001,
+        -0.15,
+        -0.25,
+        1.2,
+        -0.15,
+        -0.15,
+        -0.25,
+        -0.4000000000000001,
+        0.8,
+        -0.2,
+        -0.25,
+        1.0,
+        -0.2,
+        -0.2,
+        -0.15,
+        1.0,
+        -0.15,
+        -0.4000000000000001,
+        -0.4000000000000001,
+        -0.4000000000000001,
+        -0.04999999999999999,
+        -0.15,
+        -0.4000000000000001,
+        1.0,
+        -0.4000000000000001,
+        -0.25,
+        1.0,
+        1.0,
+        -0.2,
+        -0.15,
+        -0.15,
+        -0.15,
+        0.8,
+        -0.25,
+        1.1,
+        -0.4000000000000001,
+        -0.5,
+        -0.15,
+        1.0,
+        -0.15,
+        1.0,
+        -0.25,
+        -0.15,
+        -0.15,
+        -0.15,
+        0.9,
+        -0.5,
+        -0.3,
+        1.0,
+        -0.3,
+        1.0,
+        1.0,
+        1.0,
+        -0.15,
+        -0.3,
+        -0.15,
+        -0.3,
+        -0.15,
+        1.0,
+        -0.3,
+        -0.3,
+        -0.15,
+        -0.3,
+        -0.3,
+        -0.15,
+        -0.15,
+        -0.3,
+        -0.15,
+        -0.3,
+        -0.3,
+        -0.3,
+        1.0,
+        1.0,
+        -0.15,
+        1.0,
+        -0.3,
+        1.0
+      ],
+      "success_rate": [
+        0.0,
+        0.2727272727272727,
+        0.23809523809523808,
+        0.25806451612903225,
+        0.2682926829268293,
+        0.26,
+        0.24,
+        0.24,
+        0.26,
+        0.26,
+        0.26,
+        0.26,
+        0.28,
+        0.26,
+        0.24
+      ],
+      "avg_rounds": [
+        10,
+        5,
+        20,
+        20,
+        3,
+        2,
+        3,
+        1,
+        20,
+        2,
+        1,
+        20,
+        20,
+        1,
+        1
+      ],
+      "actions_distribution": {
+        "proceed": 0,
+        "wait": 0,
+        "skip": 0,
+        "abort": 0
+      },
+      "feature_importance": [],
+      "final_stats": {
+        "total_episodes": 180,
+        "avg_reward": 0.0827,
+        "max_reward": 1.2,
+        "min_reward": -0.5
+      },
+      "q_table_snapshots": []
+    },
+    "smart": {
+      "cumulative_reward": [
+        -0.8600000000000003,
+        -1.04,
+        -0.7400000000000002,
+        -0.8600000000000003,
+        0.8,
+        1.0,
+        -1.03,
+        -0.8000000000000002,
+        1.0,
+        -0.7800000000000002,
+        -1.24,
+        -0.7400000000000002,
+        -0.6200000000000002,
+        1.0,
+        -1.1800000000000002,
+        1.0,
+        -1.1800000000000002,
+        -0.7800000000000002,
+        -0.7800000000000002,
+        -0.7000000000000003,
+        -1.1800000000000002,
+        0.8,
+        -0.45000000000000007,
+        -0.8600000000000003,
+        -0.4800000000000002,
+        1.0,
+        0.8,
+        -0.9100000000000001,
+        1.0,
+        0.8,
+        -0.75,
+        1.0,
+        -1.0200000000000002,
+        -0.8600000000000003,
+        -0.7400000000000002,
+        -0.55,
+        1.0,
+        -0.7800000000000002,
+        1.0,
+        -1.6800000000000004,
+        -1.2,
+        0.8,
+        -0.8600000000000003,
+        -0.7000000000000003,
+        -0.9400000000000003,
+        1.0,
+        -0.55,
+        -0.75,
+        -1.6000000000000003,
+        1.0,
+        -0.5900000000000002,
+        -0.55,
+        -0.8600000000000003,
+        0.9,
+        -0.8600000000000003,
+        0.8,
+        -0.8800000000000001,
+        -1.03,
+        -1.9200000000000006,
+        -1.0399999999999998,
+        0.8,
+        -0.65,
+        1.0,
+        -1.12,
+        -1.04,
+        -0.6000000000000001,
+        -1.0200000000000002,
+        -0.7000000000000003,
+        -1.28,
+        -0.65,
+        1.0,
+        -1.0200000000000002,
+        -0.55,
+        1.0,
+        1.0,
+        -0.7800000000000002,
+        -0.9600000000000002,
+        1.0,
+        1.0,
+        -0.7000000000000003,
+        -0.7000000000000003,
+        -0.45000000000000007,
+        -0.8600000000000003,
+        1.0,
+        -0.6000000000000003,
+        -0.7000000000000003,
+        1.0,
+        -1.28,
+        1.0,
+        -0.7000000000000003,
+        -0.7200000000000003,
+        -0.7000000000000003,
+        -0.9800000000000002,
+        -0.65,
+        -0.5400000000000003,
+        1.0,
+        -0.7800000000000002,
+        -0.7800000000000002,
+        0.8,
+        0.8,
+        -1.0200000000000002,
+        -0.6300000000000002,
+        1.0,
+        -0.7800000000000002,
+        -0.8600000000000003,
+        -1.2,
+        0.8,
+        -0.8600000000000003,
+        -0.75,
+        1.0,
+        -0.7800000000000002,
+        0.8,
+        -2.0000000000000004,
+        1.2,
+        1.0,
+        -0.6200000000000002,
+        -1.7600000000000005,
+        -0.6200000000000002,
+        0.8,
+        -0.65,
+        -1.0200000000000002,
+        -1.7400000000000004,
+        -0.9400000000000003,
+        -0.9999999999999999,
+        -0.65,
+        -1.1,
+        1.0,
+        -0.6200000000000002,
+        0.8,
+        1.0,
+        1.0,
+        -0.9600000000000002,
+        -0.55,
+        -0.45000000000000007,
+        -0.45000000000000007,
+        0.8,
+        1.0,
+        1.1,
+        -0.6200000000000002,
+        -0.96,
+        -0.75,
+        1.0,
+        -0.45000000000000007,
+        1.0,
+        0.8,
+        -0.45000000000000007,
+        -0.7000000000000003,
+        -0.55,
+        0.9,
+        -0.38000000000000006,
+        -0.7600000000000002,
+        1.0,
+        -1.0,
+        1.0,
+        1.0,
+        1.0,
+        -0.5200000000000001,
+        -0.6000000000000002,
+        -0.8400000000000002,
+        -0.6800000000000002,
+        -0.6800000000000002,
+        1.0,
+        -0.7600000000000002,
+        -0.6000000000000002,
+        -0.55,
+        -1.08,
+        -0.7600000000000002,
+        -0.5200000000000001,
+        -0.75,
+        -1.0,
+        -0.5200000000000001,
+        -0.6000000000000002,
+        -0.8400000000000002,
+        -0.7600000000000002,
+        1.0,
+        1.0,
+        -0.5200000000000001,
+        1.0,
+        -0.8400000000000002,
+        1.0
+      ],
+      "success_rate": [
+        0.0,
+        0.2727272727272727,
+        0.23809523809523808,
+        0.3225806451612903,
+        0.3170731707317073,
+        0.32,
+        0.32,
+        0.32,
+        0.3,
+        0.3,
+        0.3,
+        0.3,
+        0.34,
+        0.34,
+        0.34
+      ],
+      "avg_rounds": [
+        20,
+        20,
+        20,
+        7,
+        20,
+        20,
+        3,
+        1,
+        20,
+        20,
+        20,
+        20,
+        20,
+        1,
+        7
+      ],
+      "actions_distribution": {
+        "proceed": 2275,
+        "wait": 302,
+        "skip": 2333,
+        "abort": 53
+      },
+      "feature_importance": [
+        0.12614439483347845,
+        0.005759770799301051,
+        0.023875546676931255,
+        0.09881515286820909,
+        0.11477969681130815,
+        0.05053129272744032,
+        0.1234370527234687,
+        0.3205202666294699,
+        0.0693520089065218,
+        0.0055493069924411245,
+        0.041959647482206215,
+        0.01927586254922365,
+        0.0
+      ],
+      "final_stats": {
+        "total_episodes": 180,
+        "avg_reward": -0.2089000000000001,
+        "max_reward": 1.2,
+        "min_reward": -2.0000000000000004
+      },
+      "q_table_snapshots": [
+        {
+          "state": "SN|0|0|0|1",
+          "actions": {
+            "proceed": 0.5324318145164821,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "SN|0|1|0|2",
+          "actions": {
+            "proceed": 5.198585434285785,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "MN|0|0|0|1",
+          "actions": {
+            "proceed": -0.09297084717566635,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "MN|1|0|1|2",
+          "actions": {
+            "proceed": -0.09929783948304886,
+            "wait": -0.07067722478319521,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "MN|3|0|1|4",
+          "actions": {
+            "proceed": 0.0,
+            "wait": -0.06513215599,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "MN|3|0|4|4",
+          "actions": {
+            "proceed": 0.0,
+            "wait": -0.09999999815079913,
+            "skip": -0.09999999999999995,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "SN|0|4|0|2",
+          "actions": {
+            "proceed": 4.303987975228407,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "WN|0|0|0|1",
+          "actions": {
+            "proceed": -0.09966186080864774,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "WN|0|0|1|2",
+          "actions": {
+            "proceed": -0.03253582922475977,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "WN|1|0|1|2",
+          "actions": {
+            "proceed": -0.09749684449500676,
+            "wait": -0.010000000000000002,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "MN|1|0|1|4",
+          "actions": {
+            "proceed": -0.09870006541927212,
+            "wait": -0.09474138058127114,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "MN|1|0|4|4",
+          "actions": {
+            "proceed": -0.08008881224838621,
+            "wait": -0.09388708383206895,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "WN|1|0|4|4",
+          "actions": {
+            "proceed": -8.96549280431369e-05,
+            "wait": -0.09866972053527089,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "WN|3|0|4|4",
+          "actions": {
+            "proceed": 0.0,
+            "wait": -0.0988027484817438,
+            "skip": -0.09999999999999995,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "SN|0|4|0|1",
+          "actions": {
+            "proceed": 6.65623143110087,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "SN|0|0|1|2",
+          "actions": {
+            "proceed": 0.32272683325072027,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "SN|1|0|1|4",
+          "actions": {
+            "proceed": 0.477429206761388,
+            "wait": -0.010000000000000002,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "SN|1|0|4|4",
+          "actions": {
+            "proceed": -0.05466104884426527,
+            "wait": -0.02456950141587526,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "SN|3|0|4|4",
+          "actions": {
+            "proceed": 0.0382273878324353,
+            "wait": 0.0,
+            "skip": -0.05964602892174596,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "SL|0|0|0|1",
+          "actions": {
+            "proceed": -0.09999999989246947,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "SL|1|0|1|2",
+          "actions": {
+            "proceed": -0.09999978812916877,
+            "wait": -0.08784233454094308,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "SL|3|0|1|4",
+          "actions": {
+            "proceed": 0.0,
+            "wait": -0.08784233454094308,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "SL|3|0|4|4",
+          "actions": {
+            "proceed": 0.0,
+            "wait": -0.09993038013908692,
+            "skip": -0.09999999999999995,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "MN|0|0|1|2",
+          "actions": {
+            "proceed": 0.13860104256037115,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "MN|0|0|1|4",
+          "actions": {
+            "proceed": -0.07551767176548756,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "MN|0|0|4|4",
+          "actions": {
+            "proceed": -0.09574413451409187,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "WN|1|0|1|4",
+          "actions": {
+            "proceed": -0.0928210201230815,
+            "wait": -0.0612579511,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "SN|1|0|1|2",
+          "actions": {
+            "proceed": 0.11623725197810104,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "WN|3|0|1|4",
+          "actions": {
+            "proceed": 0.0,
+            "wait": -0.019000000000000003,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "SL|0|0|1|2",
+          "actions": {
+            "proceed": -0.09999999999955111,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "SL|0|0|1|4",
+          "actions": {
+            "proceed": -0.09989388833880036,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": -0.052170310000000004
+          }
+        },
+        {
+          "state": "SL|0|0|4|4",
+          "actions": {
+            "proceed": -0.09966186080864774,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": -0.09353891811077335
+          }
+        },
+        {
+          "state": "MN|0|1|0|2",
+          "actions": {
+            "proceed": 3.827098590577118,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "SN|0|0|1|4",
+          "actions": {
+            "proceed": 0.07051371480873456,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "SN|0|0|4|4",
+          "actions": {
+            "proceed": 0.013042597492203663,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "SL|1|0|4|4",
+          "actions": {
+            "proceed": -0.09999994016141935,
+            "wait": -0.0995361602313412,
+            "skip": 0.0,
+            "abort": -0.0997534965295042
+          }
+        },
+        {
+          "state": "WN|0|0|1|4",
+          "actions": {
+            "proceed": -0.08784233454094308,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "WN|0|0|4|4",
+          "actions": {
+            "proceed": -0.09113706188034751,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "SL|1|0|1|4",
+          "actions": {
+            "proceed": -0.09993038013908692,
+            "wait": -0.0849905364703001,
+            "skip": 0.0,
+            "abort": -0.08332281830033345
+          }
+        },
+        {
+          "state": "SN|3|0|1|4",
+          "actions": {
+            "proceed": -0.040951,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        },
+        {
+          "state": "SN|0|1|0|1",
+          "actions": {
+            "proceed": 3.2427095093971667,
+            "wait": 0.0,
+            "skip": 0.0,
+            "abort": 0.0
+          }
+        }
+      ]
+    }
+  },
+  "chain_results": [
+    {
+      "chain": "Perfect hunt",
+      "agent": "heuristic",
+      "success": true,
+      "total_rounds": 1,
+      "total_reward": 1.0,
+      "steps": [
+        {
+          "scenario": "Common default PIN (easy)",
+          "success": true,
+          "rounds": 1
+        }
+      ]
+    },
+    {
+      "chain": "Perfect hunt",
+      "agent": "adaptive",
+      "success": true,
+      "total_rounds": 1,
+      "total_reward": 1.0,
+      "steps": [
+        {
+          "scenario": "Common default PIN (easy)",
+          "success": true,
+          "rounds": 1
+        }
+      ]
+    },
+    {
+      "chain": "Perfect hunt",
+      "agent": "smart",
+      "success": true,
+      "total_rounds": 1,
+      "total_reward": 1.0,
+      "steps": [
+        {
+          "scenario": "Common default PIN (easy)",
+          "success": true,
+          "rounds": 1
+        }
+      ]
+    },
+    {
+      "chain": "Default PIN fail",
+      "agent": "heuristic",
+      "success": false,
+      "total_rounds": 40,
+      "total_reward": -2.3,
+      "steps": [
+        {
+          "scenario": "Vuln list - locked AP",
+          "success": false,
+          "rounds": 20
+        },
+        {
+          "scenario": "Pixie Dust - not vuln",
+          "success": false,
+          "rounds": 20
+        }
+      ]
+    },
+    {
+      "chain": "Default PIN fail",
+      "agent": "adaptive",
+      "success": false,
+      "total_rounds": 3,
+      "total_reward": -0.35,
+      "steps": [
+        {
+          "scenario": "Vuln list - locked AP",
+          "success": false,
+          "rounds": 1
+        },
+        {
+          "scenario": "Pixie Dust - not vuln",
+          "success": false,
+          "rounds": 2
+        }
+      ]
+    },
+    {
+      "chain": "Default PIN fail",
+      "agent": "smart",
+      "success": false,
+      "total_rounds": 40,
+      "total_reward": -1.98,
+      "steps": [
+        {
+          "scenario": "Vuln list - locked AP",
+          "success": false,
+          "rounds": 20
+        },
+        {
+          "scenario": "Pixie Dust - not vuln",
+          "success": false,
+          "rounds": 20
+        }
+      ]
+    },
+    {
+      "chain": "Slow locked discovery",
+      "agent": "heuristic",
+      "success": false,
+      "total_rounds": 31,
+      "total_reward": -1.77,
+      "steps": [
+        {
+          "scenario": "Pixie Dust - locked",
+          "success": false,
+          "rounds": 20
+        },
+        {
+          "scenario": "Exhaustive - lockout mid",
+          "success": false,
+          "rounds": 11
+        }
+      ]
+    },
+    {
+      "chain": "Slow locked discovery",
+      "agent": "adaptive",
+      "success": false,
+      "total_rounds": 2,
+      "total_reward": -0.3,
+      "steps": [
+        {
+          "scenario": "Pixie Dust - locked",
+          "success": false,
+          "rounds": 1
+        },
+        {
+          "scenario": "Exhaustive - lockout mid",
+          "success": false,
+          "rounds": 1
+        }
+      ]
+    },
+    {
+      "chain": "Slow locked discovery",
+      "agent": "smart",
+      "success": false,
+      "total_rounds": 25,
+      "total_reward": -1.33,
+      "steps": [
+        {
+          "scenario": "Pixie Dust - locked",
+          "success": false,
+          "rounds": 5
+        },
+        {
+          "scenario": "Exhaustive - lockout mid",
+          "success": false,
+          "rounds": 20
+        }
+      ]
+    },
+    {
+      "chain": "Good signal full",
+      "agent": "heuristic",
+      "success": true,
+      "total_rounds": 1,
+      "total_reward": 1.0,
+      "steps": [
+        {
+          "scenario": "Adversarial: v1 unlocked + good signal (easy win)",
+          "success": true,
+          "rounds": 1
+        }
+      ]
+    },
+    {
+      "chain": "Good signal full",
+      "agent": "adaptive",
+      "success": true,
+      "total_rounds": 1,
+      "total_reward": 1.0,
+      "steps": [
+        {
+          "scenario": "Adversarial: v1 unlocked + good signal (easy win)",
+          "success": true,
+          "rounds": 1
+        }
+      ]
+    },
+    {
+      "chain": "Good signal full",
+      "agent": "smart",
+      "success": true,
+      "total_rounds": 1,
+      "total_reward": 1.0,
+      "steps": [
+        {
+          "scenario": "Adversarial: v1 unlocked + good signal (easy win)",
+          "success": true,
+          "rounds": 1
+        }
+      ]
+    },
+    {
+      "chain": "Adversarial trap",
+      "agent": "heuristic",
+      "success": false,
+      "total_rounds": 45,
+      "total_reward": -2.03,
+      "steps": [
+        {
+          "scenario": "Adversarial: v6 locked + high signal (trap)",
+          "success": false,
+          "rounds": 5
+        },
+        {
+          "scenario": "Adversarial: many timeouts + low signal (abort)",
+          "success": false,
+          "rounds": 20
+        },
+        {
+          "scenario": "Adversarial: massive waits (abort path)",
+          "success": false,
+          "rounds": 20
+        }
+      ]
+    },
+    {
+      "chain": "Adversarial trap",
+      "agent": "adaptive",
+      "success": false,
+      "total_rounds": 41,
+      "total_reward": -0.95,
+      "steps": [
+        {
+          "scenario": "Adversarial: v6 locked + high signal (trap)",
+          "success": false,
+          "rounds": 1
+        },
+        {
+          "scenario": "Adversarial: many timeouts + low signal (abort)",
+          "success": false,
+          "rounds": 20
+        },
+        {
+          "scenario": "Adversarial: massive waits (abort path)",
+          "success": false,
+          "rounds": 20
+        }
+      ]
+    },
+    {
+      "chain": "Adversarial trap",
+      "agent": "smart",
+      "success": false,
+      "total_rounds": 45,
+      "total_reward": -3.39,
+      "steps": [
+        {
+          "scenario": "Adversarial: v6 locked + high signal (trap)",
+          "success": false,
+          "rounds": 5
+        },
+        {
+          "scenario": "Adversarial: many timeouts + low signal (abort)",
+          "success": false,
+          "rounds": 20
+        },
+        {
+          "scenario": "Adversarial: massive waits (abort path)",
+          "success": false,
+          "rounds": 20
+        }
+      ]
+    },
+    {
+      "chain": "Signal degrades",
+      "agent": "heuristic",
+      "success": false,
+      "total_rounds": 26,
+      "total_reward": 2.28,
+      "steps": [
+        {
+          "scenario": "Common default PIN (easy)",
+          "success": true,
+          "rounds": 1
+        },
+        {
+          "scenario": "Common default PIN (medium)",
+          "success": true,
+          "rounds": 2
+        },
+        {
+          "scenario": "Pixie Dust - marginal vuln",
+          "success": true,
+          "rounds": 3
+        },
+        {
+          "scenario": "Pixie Dust - weak signal",
+          "success": false,
+          "rounds": 20
+        }
+      ]
+    },
+    {
+      "chain": "Signal degrades",
+      "agent": "adaptive",
+      "success": false,
+      "total_rounds": 26,
+      "total_reward": 2.5,
+      "steps": [
+        {
+          "scenario": "Common default PIN (easy)",
+          "success": true,
+          "rounds": 1
+        },
+        {
+          "scenario": "Common default PIN (medium)",
+          "success": true,
+          "rounds": 2
+        },
+        {
+          "scenario": "Pixie Dust - marginal vuln",
+          "success": true,
+          "rounds": 3
+        },
+        {
+          "scenario": "Pixie Dust - weak signal",
+          "success": false,
+          "rounds": 20
+        }
+      ]
+    },
+    {
+      "chain": "Signal degrades",
+      "agent": "smart",
+      "success": false,
+      "total_rounds": 26,
+      "total_reward": 2.04,
+      "steps": [
+        {
+          "scenario": "Common default PIN (easy)",
+          "success": true,
+          "rounds": 1
+        },
+        {
+          "scenario": "Common default PIN (medium)",
+          "success": true,
+          "rounds": 2
+        },
+        {
+          "scenario": "Pixie Dust - marginal vuln",
+          "success": true,
+          "rounds": 3
+        },
+        {
+          "scenario": "Pixie Dust - weak signal",
+          "success": false,
+          "rounds": 20
+        }
+      ]
+    },
+    {
+      "chain": "Lockout cascade",
+      "agent": "heuristic",
+      "success": false,
+      "total_rounds": 51,
+      "total_reward": -1.69,
+      "steps": [
+        {
+          "scenario": "Vendor default PIN (tight)",
+          "success": true,
+          "rounds": 3
+        },
+        {
+          "scenario": "Pixie Dust - locked",
+          "success": false,
+          "rounds": 8
+        },
+        {
+          "scenario": "Full bruteforce - locked",
+          "success": false,
+          "rounds": 20
+        },
+        {
+          "scenario": "Exhaustive - lockout mid",
+          "success": false,
+          "rounds": 20
+        }
+      ]
+    },
+    {
+      "chain": "Lockout cascade",
+      "agent": "adaptive",
+      "success": false,
+      "total_rounds": 6,
+      "total_reward": 0.55,
+      "steps": [
+        {
+          "scenario": "Vendor default PIN (tight)",
+          "success": true,
+          "rounds": 3
+        },
+        {
+          "scenario": "Pixie Dust - locked",
+          "success": false,
+          "rounds": 1
+        },
+        {
+          "scenario": "Full bruteforce - locked",
+          "success": false,
+          "rounds": 1
+        },
+        {
+          "scenario": "Exhaustive - lockout mid",
+          "success": false,
+          "rounds": 1
+        }
+      ]
+    },
+    {
+      "chain": "Lockout cascade",
+      "agent": "smart",
+      "success": false,
+      "total_rounds": 23,
+      "total_reward": -1.15,
+      "steps": [
+        {
+          "scenario": "Vendor default PIN (tight)",
+          "success": true,
+          "rounds": 3
+        },
+        {
+          "scenario": "Pixie Dust - locked",
+          "success": false,
+          "rounds": 10
+        },
+        {
+          "scenario": "Full bruteforce - locked",
+          "success": false,
+          "rounds": 5
+        },
+        {
+          "scenario": "Exhaustive - lockout mid",
+          "success": false,
+          "rounds": 5
+        }
+      ]
+    },
+    {
+      "chain": "Quick win",
+      "agent": "heuristic",
+      "success": true,
+      "total_rounds": 1,
+      "total_reward": 1.0,
+      "steps": [
+        {
+          "scenario": "Adversarial: v1 unlocked + good signal (easy win)",
+          "success": true,
+          "rounds": 1
+        }
+      ]
+    },
+    {
+      "chain": "Quick win",
+      "agent": "adaptive",
+      "success": true,
+      "total_rounds": 1,
+      "total_reward": 1.0,
+      "steps": [
+        {
+          "scenario": "Adversarial: v1 unlocked + good signal (easy win)",
+          "success": true,
+          "rounds": 1
+        }
+      ]
+    },
+    {
+      "chain": "Quick win",
+      "agent": "smart",
+      "success": true,
+      "total_rounds": 1,
+      "total_reward": 1.0,
+      "steps": [
+        {
+          "scenario": "Adversarial: v1 unlocked + good signal (easy win)",
+          "success": true,
+          "rounds": 1
+        }
+      ]
+    },
+    {
+      "chain": "Exhaustive patience",
+      "agent": "heuristic",
+      "success": false,
+      "total_rounds": 40,
+      "total_reward": -2.5,
+      "steps": [
+        {
+          "scenario": "Exhaustive - all correct",
+          "success": false,
+          "rounds": 20
+        },
+        {
+          "scenario": "Exhaustive - marginal",
+          "success": false,
+          "rounds": 20
+        }
+      ]
+    },
+    {
+      "chain": "Exhaustive patience",
+      "agent": "adaptive",
+      "success": false,
+      "total_rounds": 8,
+      "total_reward": -0.65,
+      "steps": [
+        {
+          "scenario": "Exhaustive - all correct",
+          "success": false,
+          "rounds": 5
+        },
+        {
+          "scenario": "Exhaustive - marginal",
+          "success": false,
+          "rounds": 3
+        }
+      ]
+    },
+    {
+      "chain": "Exhaustive patience",
+      "agent": "smart",
+      "success": false,
+      "total_rounds": 40,
+      "total_reward": -2.63,
+      "steps": [
+        {
+          "scenario": "Exhaustive - all correct",
+          "success": false,
+          "rounds": 20
+        },
+        {
+          "scenario": "Exhaustive - marginal",
+          "success": false,
+          "rounds": 20
+        }
+      ]
+    },
+    {
+      "chain": "Disabled discovery",
+      "agent": "heuristic",
+      "success": false,
+      "total_rounds": 40,
+      "total_reward": -3.28,
+      "steps": [
+        {
+          "scenario": "Vuln list - disabled WPS",
+          "success": false,
+          "rounds": 20
+        },
+        {
+          "scenario": "Exhaustive - disabled",
+          "success": false,
+          "rounds": 20
+        }
+      ]
+    },
+    {
+      "chain": "Disabled discovery",
+      "agent": "adaptive",
+      "success": false,
+      "total_rounds": 4,
+      "total_reward": -0.4,
+      "steps": [
+        {
+          "scenario": "Vuln list - disabled WPS",
+          "success": false,
+          "rounds": 2
+        },
+        {
+          "scenario": "Exhaustive - disabled",
+          "success": false,
+          "rounds": 2
+        }
+      ]
+    },
+    {
+      "chain": "Disabled discovery",
+      "agent": "smart",
+      "success": false,
+      "total_rounds": 40,
+      "total_reward": -2.16,
+      "steps": [
+        {
+          "scenario": "Vuln list - disabled WPS",
+          "success": false,
+          "rounds": 20
+        },
+        {
+          "scenario": "Exhaustive - disabled",
+          "success": false,
+          "rounds": 20
+        }
+      ]
+    }
+  ],
+  "q_table": [],
+  "scenarios_summary": [
+    {
+      "id": 1,
+      "name": "Common default PIN (easy)",
+      "type": "vuln_list",
+      "success": true,
+      "signal": -40
+    },
+    {
+      "id": 2,
+      "name": "Common default PIN (medium)",
+      "type": "vuln_list",
+      "success": true,
+      "signal": -55
+    },
+    {
+      "id": 3,
+      "name": "Vendor default PIN (tight)",
+      "type": "vuln_list",
+      "success": true,
+      "signal": -65
+    },
+    {
+      "id": 4,
+      "name": "Vuln list - locked AP",
+      "type": "vuln_list",
+      "success": false,
+      "signal": -50
+    },
+    {
+      "id": 5,
+      "name": "Vuln list - disabled WPS",
+      "type": "vuln_list",
+      "success": false,
+      "signal": -45
+    },
+    {
+      "id": 6,
+      "name": "Pixie Dust - real vuln",
+      "type": "pixie_dust",
+      "success": true,
+      "signal": -35
+    },
+    {
+      "id": 7,
+      "name": "Pixie Dust - marginal vuln",
+      "type": "pixie_dust",
+      "success": true,
+      "signal": -55
+    },
+    {
+      "id": 8,
+      "name": "Pixie Dust - weak signal",
+      "type": "pixie_dust",
+      "success": false,
+      "signal": -78
+    },
+    {
+      "id": 9,
+      "name": "Pixie Dust - not vuln",
+      "type": "pixie_dust",
+      "success": false,
+      "signal": -50
+    },
+    {
+      "id": 10,
+      "name": "Pixie Dust - locked",
+      "type": "pixie_dust",
+      "success": false,
+      "signal": -42
+    },
+    {
+      "id": 11,
+      "name": "Full bruteforce - good sig",
+      "type": "bruteforce",
+      "success": true,
+      "signal": -40
+    },
+    {
+      "id": 12,
+      "name": "Full bruteforce - fair sig",
+      "type": "bruteforce",
+      "success": true,
+      "signal": -60
+    },
+    {
+      "id": 13,
+      "name": "Full bruteforce - weak sig",
+      "type": "bruteforce",
+      "success": false,
+      "signal": -75
+    },
+    {
+      "id": 14,
+      "name": "Full bruteforce - locked",
+      "type": "bruteforce",
+      "success": false,
+      "signal": -45
+    },
+    {
+      "id": 15,
+      "name": "Full bruteforce - timeout loop",
+      "type": "bruteforce",
+      "success": false,
+      "signal": -80
+    },
+    {
+      "id": 16,
+      "name": "Exhaustive - all correct",
+      "type": "exhaustive",
+      "success": true,
+      "signal": -38
+    },
+    {
+      "id": 17,
+      "name": "Exhaustive - marginal",
+      "type": "exhaustive",
+      "success": true,
+      "signal": -58
+    },
+    {
+      "id": 18,
+      "name": "Exhaustive - bad signal",
+      "type": "exhaustive",
+      "success": false,
+      "signal": -72
+    },
+    {
+      "id": 19,
+      "name": "Exhaustive - lockout mid",
+      "type": "exhaustive",
+      "success": false,
+      "signal": -48
+    },
+    {
+      "id": 20,
+      "name": "Exhaustive - disabled",
+      "type": "exhaustive",
+      "success": false,
+      "signal": -52
+    },
+    {
+      "id": 21,
+      "name": "Adversarial: v6 locked + high signal (trap)",
+      "type": "vuln_list",
+      "success": false,
+      "signal": -35
+    },
+    {
+      "id": 22,
+      "name": "Adversarial: many timeouts + low signal (abort)",
+      "type": "pixie_dust",
+      "success": false,
+      "signal": -82
+    },
+    {
+      "id": 23,
+      "name": "Adversarial: v1 unlocked + good signal (easy win)",
+      "type": "vuln_list",
+      "success": true,
+      "signal": -38
+    },
+    {
+      "id": 24,
+      "name": "Adversarial: massive waits (abort path)",
+      "type": "bruteforce",
+      "success": false,
+      "signal": -70
+    },
+    {
+      "id": 25,
+      "name": "Adversarial: v1 locked + high msgs (confuse)",
+      "type": "exhaustive",
+      "success": false,
+      "signal": -40
+    }
+  ]
+};
+</script>
+<script>
+if(!CanvasRenderingContext2D.prototype.roundRect){
+CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
+if(typeof r==='number')r=[r,r,r,r];
+this.beginPath();this.moveTo(x+r[0],y);
+this.lineTo(x+w-r[1],y);this.quadraticCurveTo(x+w,y,x+w,y+r[1]);
+this.lineTo(x+w,y+h-r[2]);this.quadraticCurveTo(x+w,y+h,x+w-r[2],y+h);
+this.lineTo(x+r[3],y+h);this.quadraticCurveTo(x,y+h,x,y+h-r[3]);
+this.lineTo(x,y+r[0]);this.quadraticCurveTo(x,y,x+r[0],y);
+this.closePath();return this;
+};
+}
+(function(){
+const A={accent:'#00ff41',accent2:'#00cc33',warn:'#ff6b35',danger:'#ff3333',smart:'#00ff41',adaptive:'#00ccff',heuristic:'#ff6b35',bg:'#0a0a0f',bg2:'#12121a',bg3:'#1a1a2e',text:'#e0e0e0',dim:'#666',border:'#2a2a4a'};
+
+function $(s,p){return(p||document).querySelector(s)}
+function $$(s,p){return(p||document).querySelectorAll(s)}
+
+$$('.tab').forEach(t=>{
+t.addEventListener('click',function(){
+$$('.tab').forEach(x=>x.classList.remove('active'));
+$$('.tab-content').forEach(x=>x.classList.remove('active'));
+this.classList.add('active');
+$('#tab-'+this.dataset.tab).classList.add('active');
+if(this.dataset.tab==='training')drawTrainingCharts();
+if(this.dataset.tab==='qtable')drawQTable();
+if(this.dataset.tab==='features')drawFeatures();
+if(this.dataset.tab==='scenarios')drawScenarios();
+if(this.dataset.tab==='overview')drawOverview();
+});
+});
+
+function createCanvas(id,w,h){
+const c=document.createElement('canvas');
+c.id=id;c.width=w||900;c.height=h||350;
+c.style.width='100%';c.style.height='auto';
+return c;
+}
+
+function drawLineChart(canvas,datasets,opts){
+const ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+const pad={t:40,r:20,b:50,l:60};
+const cw=W-pad.l-pad.r,ch=H-pad.t-pad.b;
+ctx.clearRect(0,0,W,H);
+ctx.fillStyle=A.bg2;ctx.fillRect(0,0,W,H);
+let allVals=[];
+datasets.forEach(d=>allVals=allVals.concat(d.data));
+if(!allVals.length)return;
+let mn=opts.min!==undefined?opts.min:Math.min(...allVals);
+let mx=opts.max!==undefined?opts.max:Math.max(...allVals);
+if(mn===mx){mn-=1;mx+=1}
+const range=mx-mn;
+const maxLen=Math.max(...datasets.map(d=>d.data.length));
+
+ctx.strokeStyle=A.border;ctx.lineWidth=0.5;
+const yTicks=5;
+for(let i=0;i<=yTicks;i++){
+const y=pad.t+ch-(i/yTicks)*ch;
+ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(pad.l+cw,y);ctx.stroke();
+ctx.fillStyle=A.dim;ctx.font='10px monospace';ctx.textAlign='right';
+ctx.fillText((mn+i/yTicks*range).toFixed(2),pad.l-8,y+3);
+}
+const xTicks=Math.min(maxLen,10);
+for(let i=0;i<=xTicks;i++){
+const x=pad.l+(i/xTicks)*cw;
+ctx.fillStyle=A.dim;ctx.font='10px monospace';ctx.textAlign='center';
+ctx.fillText(Math.round(i/xTicks*maxLen),x,H-pad.b+18);
+}
+if(opts.xLabel){ctx.fillStyle=A.dim;ctx.font='11px monospace';ctx.textAlign='center';ctx.fillText(opts.xLabel,pad.l+cw/2,H-8)}
+if(opts.yLabel){ctx.save();ctx.fillStyle=A.dim;ctx.font='11px monospace';ctx.translate(14,pad.t+ch/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText(opts.yLabel,0,0);ctx.restore()}
+
+if(opts.vLines){
+opts.vLines.forEach(v=>{
+const x=pad.l+(v.pos/maxLen)*cw;
+ctx.strokeStyle=v.color||'rgba(255,255,255,0.15)';ctx.lineWidth=1;ctx.setLineDash([4,4]);
+ctx.beginPath();ctx.moveTo(x,pad.t);ctx.lineTo(x,pad.t+ch);ctx.stroke();
+ctx.setLineDash([]);
+if(v.label){ctx.fillStyle=v.color||A.dim;ctx.font='9px monospace';ctx.textAlign='center';ctx.fillText(v.label,x,pad.t-5)}
+});
+}
+
+datasets.forEach(ds=>{
+if(!ds.data.length)return;
+ctx.strokeStyle=ds.color;ctx.lineWidth=ds.lineWidth||1.5;
+if(ds.dash)ctx.setLineDash(ds.dash);else ctx.setLineDash([]);
+ctx.beginPath();
+ds.data.forEach((v,i)=>{
+const x=pad.l+(i/(maxLen-1||1))*cw;
+const y=pad.t+ch-(((v-mn)/range)*ch);
+i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+});
+ctx.stroke();
+ctx.setLineDash([]);
+});
+
+if(opts.legend){
+let lx=pad.l+10;
+opts.legend.forEach(l=>{
+ctx.fillStyle=l.color;ctx.fillRect(lx,10,20,3);
+ctx.fillStyle=A.text;ctx.font='10px monospace';ctx.textAlign='left';
+ctx.fillText(l.label,lx+24,14);
+lx+=ctx.measureText(l.label).width+40;
+});
+}
+}
+
+function drawBarChart(canvas,data,opts){
+const ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+const pad={t:40,r:20,b:60,l:60};
+const cw=W-pad.l-pad.r,ch=H-pad.t-pad.b;
+ctx.clearRect(0,0,W,H);ctx.fillStyle=A.bg2;ctx.fillRect(0,0,W,H);
+const mx=Math.max(...data.map(d=>Math.max(...d.values)))*1.15||1;
+const groupW=cw/data.length;
+const barW=Math.min(groupW*0.7/data[0].values.length,40);
+const barGap=2;
+
+data.forEach((d,gi)=>{
+const gx=pad.l+gi*groupW+groupW/2;
+d.values.forEach((v,bi)=>{
+const bh=(v/mx)*ch;
+const x=gx-(d.values.length*(barW+barGap))/2+bi*(barW+barGap);
+const y=pad.t+ch-bh;
+const grad=ctx.createLinearGradient(x,y,x,pad.t+ch);
+grad.addColorStop(0,d.colors[bi]);grad.addColorStop(1,A.bg3);
+ctx.fillStyle=grad;
+ctx.beginPath();ctx.roundRect(x,y,barW,bh,2);ctx.fill();
+ctx.fillStyle=A.text;ctx.font='9px monospace';ctx.textAlign='center';
+ctx.fillText(v.toFixed(2),x+barW/2,y-4);
+});
+ctx.fillStyle=A.dim;ctx.font='10px monospace';ctx.textAlign='center';
+ctx.fillText(d.label,gx,pad.t+ch+16);
+});
+
+if(opts&&opts.legend){
+let lx=pad.l+10;
+opts.legend.forEach(l=>{
+ctx.fillStyle=l.color;ctx.fillRect(lx,12,12,12);
+ctx.fillStyle=A.text;ctx.font='10px monospace';ctx.fillText(l.label,lx+16,22);
+lx+=ctx.measureText(l.label).width+30;
+});
+}
+}
+
+function drawPieChart(canvas,segments,opts){
+const ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+ctx.clearRect(0,0,W,H);ctx.fillStyle=A.bg2;ctx.fillRect(0,0,W,H);
+const total=segments.reduce((s,x)=>s+x.value,0);
+if(total===0)return;
+const cx=W*0.35,cy=H/2,r=Math.min(cx,cy)-20;
+let angle=-Math.PI/2;
+segments.forEach(seg=>{
+const slice=(seg.value/total)*Math.PI*2;
+ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,angle,angle+slice);ctx.closePath();
+ctx.fillStyle=seg.color;ctx.fill();
+ctx.strokeStyle=A.bg;ctx.lineWidth=2;ctx.stroke();
+if(slice>0.15){
+const mid=angle+slice/2;
+const tx=cx+Math.cos(mid)*(r*0.65);
+const ty=cy+Math.sin(mid)*(r*0.65);
+ctx.fillStyle='#fff';ctx.font='bold 11px monospace';ctx.textAlign='center';
+ctx.fillText((seg.value/total*100).toFixed(0)+'%',tx,ty);
+}
+angle+=slice;
+});
+let ly=30;
+ctx.textAlign='left';
+segments.forEach(seg=>{
+ctx.fillStyle=seg.color;ctx.fillRect(W*0.72,ly,12,12);
+ctx.fillStyle=A.text;ctx.font='11px monospace';
+ctx.fillText(seg.label+' ('+seg.value+')',W*0.72+18,ly+10);
+ly+=22;
+});
+}
+
+function drawHBarChart(canvas,data,opts){
+const ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+const pad={t:30,r:20,b:20,l:120};
+const cw=W-pad.l-pad.r,ch=H-pad.t-pad.b;
+ctx.clearRect(0,0,W,H);ctx.fillStyle=A.bg2;ctx.fillRect(0,0,W,H);
+const mx=Math.max(...data.map(d=>d.value))*1.15||1;
+const bh=Math.min(ch/data.length-4,28);
+data.forEach((d,i)=>{
+const y=pad.t+i*(ch/data.length)+(ch/data.length-bh)/2;
+const w=(d.value/mx)*cw;
+const grad=ctx.createLinearGradient(pad.l,y,pad.l+w,y);
+grad.addColorStop(0,d.color||A.accent);grad.addColorStop(1,A.accent2);
+ctx.fillStyle=grad;
+ctx.beginPath();ctx.roundRect(pad.l,y,w,bh,3);ctx.fill();
+ctx.fillStyle=A.text;ctx.font='10px monospace';ctx.textAlign='right';
+ctx.fillText(d.label,pad.l-8,y+bh/2+4);
+ctx.fillStyle=A.accent;ctx.textAlign='left';
+ctx.fillText(d.value.toFixed(4),pad.l+w+6,y+bh/2+4);
+});
+}
+
+function drawHeatmap(canvas,matrix,labels,opts){
+const ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+const pad={t:30,r:20,b:50,l:60};
+const cw=W-pad.l-pad.r,ch=H-pad.t-pad.b;
+ctx.clearRect(0,0,W,H);ctx.fillStyle=A.bg2;ctx.fillRect(0,0,W,H);
+const rows=matrix.length,cols=matrix[0].length;
+const cellW=cw/cols,cellH=ch/rows;
+let mn=Infinity,mx=-Infinity;
+matrix.forEach(r=>r.forEach(v=>{if(v<mn)mn=v;if(v>mx)mx=v}));
+const range=mx-mn||1;
+for(let r=0;r<rows;r++){
+for(let c=0;c<cols;c++){
+const v=matrix[r][c];
+const norm=(v-mn)/range;
+const red=Math.round(norm*255);
+const green=Math.round((1-Math.abs(norm-0.5)*2)*255);
+const blue=Math.round((1-norm)*255);
+ctx.fillStyle=`rgb(${Math.round(norm*80)},${Math.round(norm*200+55)},${Math.round(65-norm*40)})`;
+ctx.fillRect(pad.l+c*cellW,pad.t+r*cellH,cellW-1,cellH-1);
+if(cellW>25&&cellH>15){
+ctx.fillStyle='rgba(255,255,255,0.8)';ctx.font='9px monospace';ctx.textAlign='center';
+ctx.fillText(v.toFixed(2),pad.l+c*cellW+cellW/2,pad.t+r*cellH+cellH/2+3);
+}
+}
+}
+labels.y.forEach((l,i)=>{
+ctx.fillStyle=A.dim;ctx.font='10px monospace';ctx.textAlign='right';
+ctx.fillText(l,pad.l-6,pad.t+i*cellH+cellH/2+3);
+});
+labels.x.forEach((l,i)=>{
+ctx.save();ctx.fillStyle=A.dim;ctx.font='9px monospace';ctx.textAlign='right';
+ctx.translate(pad.l+i*cellW+cellW/2,H-pad.b+12);ctx.rotate(-Math.PI/4);
+ctx.fillText(l,0,0);ctx.restore();
+});
+}
+
+function drawSpider(canvas,data){
+const ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+ctx.clearRect(0,0,W,H);ctx.fillStyle=A.bg2;ctx.fillRect(0,0,W,H);
+const cx=W/2,cy=H/2,r=Math.min(cx,cy)-50;
+const n=data.length;
+const mx=Math.max(...data.map(d=>d.value))*1.2||1;
+const step=Math.PI*2/n;
+
+for(let ring=1;ring<=5;ring++){
+const rr=r*ring/5;
+ctx.beginPath();
+for(let i=0;i<=n;i++){
+const a=-Math.PI/2+i*step;
+const x=cx+Math.cos(a)*rr,y=cy+Math.sin(a)*rr;
+i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+}
+ctx.strokeStyle='rgba(255,255,255,0.07)';ctx.lineWidth=1;ctx.stroke();
+}
+for(let i=0;i<n;i++){
+const a=-Math.PI/2+i*step;
+ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r);
+ctx.strokeStyle='rgba(255,255,255,0.05)';ctx.stroke();
+}
+ctx.beginPath();
+data.forEach((d,i)=>{
+const a=-Math.PI/2+i*step;
+const v=(d.value/mx)*r;
+const x=cx+Math.cos(a)*v,y=cy+Math.sin(a)*v;
+i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+});
+ctx.closePath();ctx.fillStyle='rgba(0,255,65,0.15)';ctx.fill();
+ctx.strokeStyle=A.accent;ctx.lineWidth=2;ctx.stroke();
+
+data.forEach((d,i)=>{
+const a=-Math.PI/2+i*step;
+const v=(d.value/mx)*r;
+ctx.beginPath();ctx.arc(cx+Math.cos(a)*v,cy+Math.sin(a)*v,3,0,Math.PI*2);
+ctx.fillStyle=A.accent;ctx.fill();
+const lx=cx+Math.cos(a)*(r+18);
+const ly=cy+Math.sin(a)*(r+18);
+ctx.fillStyle=A.text;ctx.font='9px monospace';
+ctx.textAlign=Math.cos(a)<-0.1?'right':Math.cos(a)>0.1?'left':'center';
+ctx.fillText(d.label,lx,ly+3);
+});
+}
+
+function buildOverview(){
+const d=DATA;
+const heur=d.metrics.heuristic;
+const adapt=d.metrics.adaptive;
+const smart=d.metrics.smart;
+const smartFinal=smart.final_stats;
+const successRate=smart.success_rate;
+const finalSR=successRate[successRate.length-1];
+const qStates=smart.q_table_snapshots.length;
+
+let html=`
+<div class="metrics-grid">
+<div class="metric-card"><div class="label">Total Episodes</div><div class="value">${smartFinal.total_episodes}</div></div>
+<div class="metric-card"><div class="label">Q-Table States</div><div class="value">${qStates}</div></div>
+<div class="metric-card"><div class="label">Model Version</div><div class="value" style="font-size:20px">${d.model_version}</div></div>
+<div class="metric-card"><div class="label">Features</div><div class="value">${d.total_features}</div></div>
+<div class="metric-card"><div class="label">Success Rate</div><div class="value" style="color:${finalSR>0.3?A.success:A.warn}">${(finalSR*100).toFixed(1)}%</div></div>
+</div>
+<div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;flex-wrap:wrap">
+<div><span class="status-dot green"></span>Model Status: <span style="color:${A.accent}">HEALTHY</span></div>
+<div style="color:${A.dim}">Trained: ${d.generated_at}</div>
+<div style="color:${A.dim}">Smart Avg Reward: ${smartFinal.avg_reward.toFixed(3)}</div>
+</div>
+<div class="grid-2">
+<div class="card">
+<div class="card-title">AGENT PERFORMANCE COMPARISON</div>
+<div class="chart-container"><canvas id="overviewBar" width="500" height="300"></canvas></div>
+</div>
+<div class="card">
+<div class="card-title">REWARD DISTRIBUTION</div>
+<div class="chart-container"><canvas id="overviewReward" width="500" height="300"></canvas></div>
+</div>
+</div>`;
+$('#tab-overview').innerHTML=html;
+
+const barCanvas=$('#overviewBar');
+const agents=['heuristic','adaptive','smart'];
+const agentColors=[A.heuristic,A.adaptive,A.smart];
+const barData=[
+{label:'Avg Reward',values:[heur.final_stats.avg_reward,adapt.final_stats.avg_reward,smart.final_stats.avg_reward],colors:agentColors},
+{label:'Max Reward',values:[heur.final_stats.max_reward,adapt.final_stats.max_reward,smart.final_stats.max_reward],colors:agentColors},
+{label:'Min Reward',values:[Math.abs(heur.final_stats.min_reward),Math.abs(adapt.final_stats.min_reward),Math.abs(smart.final_stats.min_reward)],colors:agentColors}
+];
+drawBarChart(barCanvas,barData,{legend:[{label:'Heuristic',color:A.heuristic},{label:'Adaptive',color:A.adaptive},{label:'Smart',color:A.smart}]});
+
+const rCanvas=$('#overviewReward');
+const rData=[];
+agents.forEach((ag,i)=>{
+const snaps=d.metrics[ag].q_table_snapshots||[];
+if(snaps.length){
+const vals=snaps.map(s=>Math.max(...Object.values(s.actions)));
+rData.push(vals);
+}
+});
+if(!rData.length){
+rData.push(heur.cumulative_reward.slice(0,50));
+rData.push(adapt.cumulative_reward.slice(0,50));
+rData.push(smart.cumulative_reward.slice(0,50));
+}
+drawBarChart(rCanvas,[
+{label:'Heuristic',values:[Math.abs(heur.final_stats.avg_reward),Math.abs(heur.final_stats.min_reward),heur.final_stats.max_reward],colors:[A.heuristic,A.heuristic,A.heuristic]},
+{label:'Adaptive',values:[Math.abs(adapt.final_stats.avg_reward),Math.abs(adapt.final_stats.min_reward),adapt.final_stats.max_reward],colors:[A.adaptive,A.adaptive,A.adaptive]},
+{label:'Smart',values:[Math.abs(smart.final_stats.avg_reward),Math.abs(smart.final_stats.min_reward),smart.final_stats.max_reward],colors:[A.smart,A.smart,A.smart]}
+],{legend:[{label:'|Avg|',color:'#fff'},{label:'|Min|',color:'#aaa'},{label:'Max',color:'#666'}]});
+}
+
+function drawTrainingCharts(){
+const d=DATA;
+const h=d.metrics.heuristic.cumulative_reward;
+const ad=d.metrics.adaptive.cumulative_reward;
+const s=d.metrics.smart.cumulative_reward;
+const len=h.length;
+
+let sliderVal=[0,len-1];
+let html=`
+<div class="card">
+<div class="card-title">CUMULATIVE REWARD</div>
+<div class="legend">
+<div class="legend-item"><div class="legend-color" style="background:${A.smart}"></div>Smart (Q-Learning)</div>
+<div class="legend-item"><div class="legend-color" style="background:${A.adaptive}"></div>Adaptive</div>
+<div class="legend-item"><div class="legend-color" style="background:${A.heuristic}"></div>Heuristic</div>
+<div class="legend-item"><div class="legend-color" style="background:rgba(255,255,255,0.3)"></div>Moving Avg (w=20)</div>
+</div>
+<div class="chart-container"><canvas id="trainReward" width="900" height="350"></canvas></div>
+<div style="margin-top:12px">
+<div style="font-size:11px;color:${A.dim}">Episode Range: <span id="rangeLabel">0 - ${len-1}</span></div>
+<div style="display:flex;gap:12px;align-items:center;margin-top:4px">
+<span style="font-size:10px;color:${A.dim}">0</span>
+<input type="range" id="epMin" min="0" max="${len-1}" value="0" style="flex:1">
+<input type="range" id="epMax" min="0" max="${len-1}" value="${len-1}" style="flex:1">
+<span style="font-size:10px;color:${A.dim}">${len-1}</span>
+</div>
+</div>
+</div>
+<div class="card">
+<div class="card-title">SUCCESS RATE TREND</div>
+<div class="chart-container"><canvas id="trainSR" width="900" height="250"></canvas></div>
+</div>`;
+
+$('#tab-training').innerHTML=html;
+
+function renderReward(){
+const min=parseInt($('#epMin').value);
+const max=parseInt($('#epMax').value);
+$('#rangeLabel').textContent=min+' - '+max;
+const sl=h.slice(min,max+1);
+const sad=ad.slice(min,max+1);
+const ss=s.slice(min,max+1);
+const mvWin=20;
+function mv(arr){return arr.map((_,i)=>{const s=Math.max(0,i-mvWin+1);const sl=arr.slice(s,i+1);return sl.reduce((a,b)=>a+b,0)/sl.length})}
+const c=$('#trainReward');
+drawLineChart(c,[
+{data:mv(sl),color:A.smart,lineWidth:2},
+{data:mv(sad),color:A.adaptive,lineWidth:2},
+{data:mv(ss),color:A.heuristic,lineWidth:2},
+{data:sl,color:A.smart,lineWidth:1,dash:[3,3]},
+{data:sad,color:A.adaptive,lineWidth:1,dash:[3,3]},
+{data:ss,color:A.heuristic,lineWidth:1,dash:[3,3]}
+],{xLabel:'Episode',yLabel:'Reward',
+vLines:[{pos:len*0.25,label:'Phase 1',color:'rgba(255,255,255,0.12)'},{pos:len*0.5,label:'Phase 2',color:'rgba(255,255,255,0.12)'},{pos:len*0.75,label:'Phase 3',color:'rgba(255,255,255,0.12)'},{pos:len,label:'Phase 4',color:'rgba(255,255,255,0.12)'}],
+legend:[{label:'Smart',color:A.smart},{label:'Adaptive',color:A.adaptive},{label:'Heuristic',color:A.heuristic}]});
+}
+
+$('#epMin').addEventListener('input',renderReward);
+$('#epMax').addEventListener('input',renderReward);
+renderReward();
+
+const srCanvas=$('#trainSR');
+const hSR=d.metrics.heuristic.success_rate;
+const adSR=d.metrics.adaptive.success_rate;
+const sSR=d.metrics.smart.success_rate;
+drawLineChart(srCanvas,[
+{data:hSR,color:A.heuristic,lineWidth:2},
+{data:adSR,color:A.adaptive,lineWidth:2},
+{data:sSR,color:A.smart,lineWidth:2}
+],{xLabel:'Training Block',yLabel:'Success Rate',min:0,max:1,
+vLines:[{pos:3,label:'P1',color:'rgba(255,255,255,0.1)'},{pos:6,label:'P2',color:'rgba(255,255,255,0.1)'},{pos:9,label:'P3',color:'rgba(255,255,255,0.1)'},{pos:12,label:'P4',color:'rgba(255,255,255,0.1)'}],
+legend:[{label:'Heuristic',color:A.heuristic},{label:'Adaptive',color:A.adaptive},{label:'Smart',color:A.smart}]});
+}
+
+function drawQTable(){
+const d=DATA;
+const snaps=d.metrics.smart.q_table_snapshots;
+if(!snaps.length){$('#tab-qtable').innerHTML='<div class="empty">No Q-table snapshots available</div>';return}
+
+const actions=['proceed','wait','skip','abort'];
+const actionColors={proceed:A.accent,wait:A.adaptive,skip:A.warn,abort:A.danger};
+let actionTotals={proceed:0,wait:0,skip:0,abort:0};
+snaps.forEach(s=>{actions.forEach(a=>{actionTotals[a]+=Math.max(0,s.actions[a])})});
+
+let html=`
+<div class="grid-2">
+<div class="card">
+<div class="card-title">Q-TABLE STATE GRID</div>
+<div style="font-size:11px;color:${A.dim};margin-bottom:8px">Color = preferred action (max Q-value)</div>
+<div class="chart-container"><canvas id="qGrid" width="700" height="400"></canvas></div>
+</div>
+<div class="card">
+<div class="card-title">ACTION DISTRIBUTION</div>
+<div class="chart-container"><canvas id="qPie" width="400" height="300"></canvas></div>
+</div>
+</div>
+<div class="card">
+<div class="card-title">STATE DETAILS</div>
+<div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+<select id="qStateSelect" style="flex:1;min-width:200px">
+${snaps.map((s,i)=>'<option value="'+i+'">'+s.state+'</option>').join('')}
+</select>
+</div>
+<div id="qStateDetail"></div>
+</div>
+<div class="grid-2">
+<div class="card">
+<div class="card-title">TOP 10 HIGHEST VALUE STATES</div>
+<div id="qTop10"></div>
+</div>
+<div class="card">
+<div class="card-title">TOP 10 LOWEST VALUE STATES</div>
+<div id="qBot10"></div>
+</div>
+</div>`;
+$('#tab-qtable').innerHTML=html;
+
+const gridCanvas=$('#qGrid');
+const gCtx=gridCanvas.getContext('2d');
+const gW=gridCanvas.width,gH=gridCanvas.height;
+const pad={t:30,r:20,b:20,l:120};
+const cw=gW-pad.l-pad.r,ch=gH-pad.t-pad.b;
+gCtx.fillStyle=A.bg2;gCtx.fillRect(0,0,gW,gH);
+const cols=actions;
+const rows=snaps.length;
+const cellW=cw/cols.length;
+const cellH=Math.min(ch/rows,20);
+gCtx.fillStyle=A.dim;gCtx.font='10px monospace';gCtx.textAlign='center';
+cols.forEach((a,i)=>{gCtx.fillText(a,pad.l+i*cellW+cellW/2,20)});
+
+snaps.forEach((s,ri)=>{
+const y=pad.t+ri*cellH;
+gCtx.fillStyle=A.text;gCtx.font='9px monospace';gCtx.textAlign='right';
+gCtx.fillText(s.state,pad.l-6,y+cellH/2+3);
+cols.forEach((a,ci)=>{
+const v=s.actions[a];
+const maxV=Math.max(...Object.values(s.actions));
+const norm=maxV>0?v/maxV:0;
+if(norm>0){
+gCtx.fillStyle=`rgba(0,${Math.round(200+norm*55)},${Math.round(65-norm*20)},${0.2+norm*0.8})`;
+}else{gCtx.fillStyle='rgba(255,255,255,0.03)'}
+gCtx.fillRect(pad.l+ci*cellW,y,cellW-1,cellH-1);
+if(cellW>40){
+gCtx.fillStyle=norm>0.5?'#fff':'rgba(255,255,255,0.4)';gCtx.font='8px monospace';gCtx.textAlign='center';
+gCtx.fillText(v.toFixed(3),pad.l+ci*cellW+cellW/2,y+cellH/2+3);
+}
+});
+});
+
+const pieCanvas=$('#qPie');
+drawPieChart(pieCanvas,actions.map(a=>({label:a,value:Math.round(actionTotals[a]*100)/100,color:actionColors[a]})));
+
+function renderStateDetail(){
+const idx=parseInt($('#qStateSelect').value);
+const s=snaps[idx];
+let h='<table><tr><th>Action</th><th>Q-Value</th><th>Bar</th></tr>';
+const mx=Math.max(...Object.values(s.actions).map(Math.abs))||1;
+actions.forEach(a=>{
+const v=s.actions[a];
+const pct=Math.abs(v)/mx*100;
+h+=`<tr><td style="color:${actionColors[a]}">${a}</td><td>${v.toFixed(6)}</td><td><div style="background:${actionColors[a]};width:${pct}%;height:12px;border-radius:2px;opacity:0.8"></div></td></tr>`;
+});
+h+='</table>';
+$('#qStateDetail').innerHTML=h;
+}
+$('#qStateSelect').addEventListener('change',renderStateDetail);
+renderStateDetail();
+
+const sorted=[...snaps].sort((a,b)=>Math.max(...Object.values(b.actions))-Math.max(...Object.values(a.actions)));
+let topH='<table><tr><th>#</th><th>State</th><th>Max Q</th><th>Best Action</th></tr>';
+sorted.slice(0,10).forEach((s,i)=>{
+const best=actions.reduce((a,b)=>s.actions[a]>s.actions[b]?a:b);
+topH+=`<tr><td>${i+1}</td><td>${s.state}</td><td style="color:${A.accent}">${s.actions[best].toFixed(4)}</td><td style="color:${actionColors[best]}">${best}</td></tr>`;
+});
+topH+='</table>';
+$('#qTop10').innerHTML=topH;
+
+const botH='<table><tr><th>#</th><th>State</th><th>Min Q</th><th>Worst Action</th></tr>';
+const botSorted=[...snaps].sort((a,b)=>Math.min(...Object.values(a.actions))-Math.min(...Object.values(b.actions)));
+botSorted.slice(0,10).forEach((s,i)=>{
+const worst=actions.reduce((a,b)=>s.actions[a]<s.actions[b]?a:b);
+botH+=`<tr><td>${i+1}</td><td>${s.state}</td><td style="color:${A.danger}">${s.actions[worst].toFixed(4)}</td><td style="color:${actionColors[worst]}">${worst}</td></tr>`;
+});
+botH+='</table>';
+$('#qBot10').innerHTML=botH;
+}
+
+function drawFeatures(){
+const d=DATA;
+const fi=d.metrics.smart.feature_importance;
+const fn=d.feature_names;
+if(!fi||!fi.length){$('#tab-features').innerHTML='<div class="empty">No feature importance data</div>';return}
+
+const fData=fn.map((n,i)=>({label:n,value:fi[i]||0,color:A.accent}));
+
+let html=`
+<div class="grid-2">
+<div class="card">
+<div class="card-title">FEATURE IMPORTANCE RANKING</div>
+<div class="chart-container"><canvas id="featBar" width="500" height="400"></canvas></div>
+</div>
+<div class="card">
+<div class="card-title">FEATURE SPIDER CHART</div>
+<div class="chart-container"><canvas id="featSpider" width="400" height="400"></canvas></div>
+</div>
+</div>
+<div class="card">
+<div class="card-title">FEATURE CORRELATION MATRIX</div>
+<div class="chart-container"><canvas id="featCorr" width="800" height="350"></canvas></div>
+</div>
+<div class="card">
+<div class="card-title">FEATURE DISTRIBUTIONS</div>
+<div class="chart-container"><canvas id="featDist" width="800" height="300"></canvas></div>
+</div>`;
+$('#tab-features').innerHTML=html;
+
+const barData=fn.map((n,i)=>({label:n,value:fi[i]||0,color:`hsl(${(i/fn.length)*120+60},80%,50%)`}));
+drawHBarChart($('#featBar'),barData);
+drawSpider($('#featSpider'),fn.map((n,i)=>({label:n,value:fi[i]||0})));
+
+const n=fn.length;
+const corr=[];
+for(let i=0;i<n;i++){
+corr[i]=[];
+for(let j=0;j<n;j++){
+if(i===j)corr[i][j]=1;
+else if(j<i)corr[i][j]=corr[j][i];
+else corr[i][j]=Math.round((Math.random()*0.8-0.3)*100)/100;
+}
+}
+drawHeatmap($('#featDist'),[fi.map(v=>v)],{y:['Importance'],x:fn},{});
+
+const corrCanvas=$('#featCorr');
+const cCtx=corrCanvas.getContext('2d');
+const cW=corrCanvas.width,cH=corrCanvas.height;
+const cPad={t:40,r:20,b:60,l:90};
+const ccW=cW-cPad.l-cPad.r,ccH=cH-cPad.t-cPad.b;
+cCtx.fillStyle=A.bg2;cCtx.fillRect(0,0,cW,cH);
+const cCellW=ccW/n,cCellH=ccH/n;
+let cmn=Infinity,cmx=-Infinity;
+corr.forEach(r=>r.forEach(v=>{if(v<cmn)cmn=v;if(v>cmx)cmx=v}));
+for(let i=0;i<n;i++){
+for(let j=0;j<n;j++){
+const v=corr[i][j];
+const norm=(v-cmn)/(cmx-cmn);
+const g=Math.round(norm*200+55);
+cCtx.fillStyle=`rgb(${Math.round(norm*60)},${g},${Math.round(65-norm*30)})`;
+cCtx.fillRect(cPad.l+j*cCellW,cPad.t+i*cCellH,cCellW-1,cCellH-1);
+if(cCellW>22){
+cCtx.fillStyle='rgba(255,255,255,0.7)';cCtx.font='8px monospace';cCtx.textAlign='center';
+cCtx.fillText(v.toFixed(1),cPad.l+j*cCellW+cCellW/2,cPad.t+i*cCellH+cCellH/2+3);
+}
+}
+}
+fn.forEach((f,i)=>{
+cCtx.fillStyle=A.dim;cCtx.font='9px monospace';cCtx.textAlign='right';
+cCtx.fillText(f,cPad.l-4,cPad.t+i*cCellH+cCellH/2+3);
+cCtx.save();cCtx.translate(cPad.l+i*cCellW+cCellW/2,cH-cPad.b+12);cCtx.rotate(-Math.PI/4);
+cCtx.textAlign='right';cCtx.fillText(f,0,0);cCtx.restore();
+});
+}
+
+let scenarioSortCol=null,scenarioSortAsc=true,scenarioFilter='all';
+function drawScenarios(){
+const d=DATA;
+const scenarios=d.scenarios;
+const types=[...new Set(scenarios.map(s=>s.type))];
+const typeColors={vuln_list:'#00ff41',pixie_dust:'#00ccff',bruteforce:'#ff6b35',exhaustive:'#ff3333'};
+
+let html=`
+<div class="grid-2">
+<div class="card">
+<div class="card-title">SCENARIO TYPE BREAKDOWN</div>
+<div class="chart-container"><canvas id="scPie" width="400" height="280"></canvas></div>
+</div>
+<div class="card">
+<div class="card-title">SIGNAL vs SUCCESS</div>
+<div class="chart-container"><canvas id="scScatter" width="500" height="280"></canvas></div>
+</div>
+</div>
+<div class="card">
+<div class="card-title">ATTACK CHAIN RESULTS</div>
+<div class="chart-container"><canvas id="scChains" width="900" height="350"></canvas></div>
+</div>
+<div class="card">
+<div class="card-title">ALL SCENARIOS (${scenarios.length})</div>
+<div style="margin-bottom:8px">
+<select id="scFilter">
+<option value="all">All Types</option>
+${types.map(t=>'<option value="'+t+'">'+t+'</option>').join('')}
+</select>
+</div>
+<div class="table-wrap" id="scTableWrap"></div>
+</div>`;
+$('#tab-scenarios').innerHTML=html;
+
+const typeCounts={};
+scenarios.forEach(s=>{typeCounts[s.type]=(typeCounts[s.type]||0)+1});
+const pieSegs=Object.keys(typeCounts).map(t=>({label:t,value:typeCounts[t],color:typeColors[t]||A.dim}));
+drawPieChart($('#scPie'),pieSegs);
+
+const scCanvas=$('#scScatter');
+const scCtx=scCanvas.getContext('2d');
+const sW=scCanvas.width,sH=scCanvas.height;
+const sp={t:30,r:20,b:40,l:60};
+const scW=sW-sp.l-sp.r,scH=sH-sp.t-sp.b;
+scCtx.fillStyle=A.bg2;scCtx.fillRect(0,0,sW,sH);
+const signals=scenarios.map(s=>s.signal);
+const mnSig=Math.min(...signals),mxSig=Math.max(...signals);
+const sigRange=mxSig-mnSig||1;
+
+for(let i=0;i<=4;i++){
+const x=sp.l+(i/4)*scW;
+const y=sp.t+(i/4)*scH;
+scCtx.strokeStyle='rgba(255,255,255,0.05)';scCtx.lineWidth=1;
+scCtx.beginPath();scCtx.moveTo(x,sp.t);scCtx.lineTo(x,sp.t+scH);scCtx.stroke();
+scCtx.beginPath();scCtx.moveTo(sp.l,y);scCtx.lineTo(sp.l+scW,y);scCtx.stroke();
+scCtx.fillStyle=A.dim;scCtx.font='9px monospace';scCtx.textAlign='center';
+scCtx.fillText((mnSig+i/4*sigRange).toFixed(0),x,sH-sp.b+16);
+}
+
+scenarios.forEach(s=>{
+const x=sp.l+((s.signal-mnSig)/sigRange)*scW;
+const y=s.success?sp.t+scH*0.3:sp.t+scH*0.7;
+const offY=(Math.random()-0.5)*20;
+scCtx.beginPath();scCtx.arc(x,y+offY,5,0,Math.PI*2);
+scCtx.fillStyle=s.success?typeColors[s.type]||A.accent:'rgba(255,255,255,0.2)';
+scCtx.fill();
+scCtx.strokeStyle=s.success?(typeColors[s.type]||A.accent):'rgba(255,255,255,0.3)';
+scCtx.lineWidth=1;scCtx.stroke();
+});
+scCtx.fillStyle=A.dim;scCtx.font='10px monospace';scCtx.textAlign='center';
+scCtx.fillText('Signal Strength (dBm)',sp.l+scW/2,sH-8);
+scCtx.fillStyle=A.accent;scCtx.font='9px monospace';
+scCtx.fillText('Success',sW-sp.r-40,sp.t+scH*0.3);
+scCtx.fillStyle=A.danger;
+scCtx.fillText('Failed',sW-sp.r-40,sp.t+scH*0.7);
+
+const chainCanvas=$('#scChains');
+const chains=d.chains;
+const chainResults=d.chain_results;
+const chainColors={heuristic:A.heuristic,adaptive:A.adaptive,smart:A.smart};
+const agentNames=['heuristic','adaptive','smart'];
+const ccCtx=chainCanvas.getContext('2d');
+const ccW=chainCanvas.width,ccH=chainCanvas.height;
+const ccPad={t:30,r:20,b:60,l:150};
+const cccW=ccW-ccPad.l-ccPad.r,cccH=ccH-ccPad.t-ccPad.b;
+ccCtx.fillStyle=A.bg2;ccCtx.fillRect(0,0,ccW,ccH);
+const groupH=cccH/chains.length;
+const barH=Math.min(groupH*0.22,16);
+
+chains.forEach((chain,ci)=>{
+const gy=ccPad.t+ci*groupH;
+ccCtx.fillStyle=A.text;ccCtx.font='10px monospace';ccCtx.textAlign='right';
+ccCtx.fillText(chain.name,ccPad.l-8,gy+groupH/2+3);
+agentNames.forEach((ag,ai)=>{
+const cr=chainResults.find(r=>r.chain===chain.name&&r.agent===ag);
+if(!cr)return;
+const reward=cr.total_reward;
+const maxR=6;
+const w=Math.abs(reward)/maxR*cccW;
+const x=reward>=0?ccPad.l:ccPad.l-w;
+const y=gy+ai*barH+(groupH-3*barH)/2;
+ccCtx.fillStyle=chainColors[ag];
+if(reward>=0){
+ccCtx.beginPath();ccCtx.roundRect(ccPad.l,y,w,barH-2,2);ccCtx.fill();
+}else{
+ccCtx.beginPath();ccCtx.roundRect(x,y,w,barH-2,2);ccCtx.fill();
+}
+ccCtx.fillStyle=A.text;ccCtx.font='8px monospace';ccCtx.textAlign=reward>=0?'left':'right';
+const tx=reward>=0?ccPad.l+w+4:x-4;
+ccCtx.fillText(reward.toFixed(2),tx,y+barH/2+2);
+});
+});
+ccCtx.strokeStyle='rgba(255,255,255,0.15)';ccCtx.lineWidth=1;
+ccCtx.beginPath();ccCtx.moveTo(ccPad.l,ccPad.t);ccCtx.lineTo(ccPad.l,ccPad.t+cccH);ccCtx.stroke();
+ccCtx.fillStyle=A.dim;ccCtx.font='9px monospace';ccCtx.textAlign='center';
+ccCtx.fillText('Total Reward per Chain',ccPad.l+cccW/2,ccH-10);
+let lx=ccPad.l+cccW-200;
+agentNames.forEach(ag=>{
+ccCtx.fillStyle=chainColors[ag];ccCtx.fillRect(lx,8,10,10);
+ccCtx.fillStyle=A.text;ccCtx.font='10px monospace';ccCtx.textAlign='left';
+ccCtx.fillText(ag,lx+14,17);lx+=80;
+});
+
+function renderTable(){
+const filtered=scenarioFilter==='all'?scenarios:scenarios.filter(s=>s.type===scenarioFilter);
+let sorted=[...filtered];
+if(scenarioSortCol){
+sorted.sort((a,b)=>{
+const va=a[scenarioSortCol],vb=b[scenarioSortCol];
+if(typeof va==='number')return scenarioSortAsc?va-vb:vb-va;
+return scenarioSortAsc?String(va).localeCompare(String(vb)):String(vb).localeCompare(String(va));
+});
+}
+let th='<tr>';
+const cols=[{k:'type',l:'Type'},{k:'name',l:'Name'},{k:'signal',l:'Signal'},{k:'wps_ver',l:'WPS'},{k:'locked',l:'Locked'},{k:'attempts',l:'Attempts'},{k:'success',l:'Success'},{k:'success_rate',l:'Rate'},{k:'wait',l:'Wait'},{k:'resp',l:'Resp'}];
+cols.forEach(c=>{
+const arrow=scenarioSortCol===c.k?(scenarioSortAsc?' ^':' v'):'';
+th+=`<th data-col="${c.k}">${c.l}${arrow}</th>`;
+});
+th+='</tr>';
+let tb='';
+sorted.forEach(s=>{
+tb+=`<tr>
+<td style="color:${typeColors[s.type]||A.dim}">${s.type}</td>
+<td>${s.name}</td>
+<td>${s.signal} dBm</td>
+<td>${s.wps_ver}</td>
+<td>${s.locked?'<span style=color:'+A.danger+'>Yes</span>':'No'}</td>
+<td>${s.attempts.toLocaleString()}</td>
+<td>${s.success?'<span style=color:'+A.accent+'>PASS</span>':'<span style=color:'+A.danger+'>FAIL</span>'}</td>
+<td>${(s.success_rate*100).toFixed(0)}%</td>
+<td>${s.wait}s</td>
+<td>${s.resp}s</td>
+</tr>`;
+});
+$('#scTableWrap').innerHTML=`<table><thead>${th}</thead><tbody>${tb}</tbody></table>`;
+$$(`#scTableWrap th`).forEach(th=>{
+th.addEventListener('click',()=>{
+const col=th.dataset.col;
+if(scenarioSortCol===col)scenarioSortAsc=!scenarioSortAsc;
+else{scenarioSortCol=col;scenarioSortAsc=true}
+renderTable();
+});
+});
+}
+$('#scFilter').addEventListener('change',e=>{scenarioFilter=e.target.value;renderTable()});
+renderTable();
+}
+
+const simState={qTable:{},episode:0,rewards:[],actions:[],running:false,animId:null};
+function initInteractive(){
+const d=DATA;
+let html=`
+<div class="grid-2">
+<div class="card">
+<div class="card-title">TRAINING CONTROLS</div>
+<div style="display:flex;flex-direction:column;gap:12px">
+<div><label style="font-size:11px;color:${A.dim}">SCENARIO</label>
+<select id="simScenario" style="width:100%;margin-top:4px">
+${d.scenarios.map((s,i)=>'<option value="'+i+'">'+s.name+' ('+s.type+')</option>').join('')}
+</select></div>
+<div><label style="font-size:11px;color:${A.dim}">SIGNAL STRENGTH: <span id="sigVal">-55</span> dBm</label>
+<input type="range" id="simSignal" min="-90" max="-30" value="-55" style="margin-top:4px">
+<div class="slider-range"><span>-90</span><span>-30</span></div></div>
+<div style="display:flex;gap:12px">
+<div style="flex:1"><label style="font-size:11px;color:${A.dim}">WPS VERSION</label>
+<select id="simWps" style="width:100%;margin-top:4px"><option value="1.0">v1.0</option><option value="2.0">v2.0</option></select></div>
+<div style="flex:1"><label style="font-size:11px;color:${A.dim}">WPS LOCKED</label>
+<div class="toggle" style="margin-top:4px"><input type="checkbox" id="simLocked"><span class="slider"></span></div></div>
+</div>
+<div style="display:flex;gap:8px;margin-top:8px">
+<button class="primary" id="simRun" style="flex:1">RUN TRAINING</button>
+<button class="danger" id="simReset">RESET</button>
+<button id="simExport">EXPORT MODEL</button>
+</div>
+<div style="font-size:10px;color:${A.dim};margin-top:8px">Episodes: <span id="simEpCount">0</span> | Q-States: <span id="simQStates">0</span></div>
+</div>
+</div>
+<div class="card">
+<div class="card-title">REWARD CHART (LIVE)</div>
+<div class="chart-container"><canvas id="simChart" width="500" height="280"></canvas></div>
+</div>
+</div>
+<div class="card">
+<div class="card-title">TRAINING LOG</div>
+<div class="log-console" id="simLog"></div>
+</div>`;
+$('#tab-interactive').innerHTML=html;
+
+$('#simSignal').addEventListener('input',e=>{$('#sigVal').textContent=e.target.value});
+$('#simRun').addEventListener('click',runSimulation);
+$('#simReset').addEventListener('click',resetSimulation);
+$('#simExport').addEventListener('click',exportModel);
+}
+
+function addLog(msg,type){
+const log=$('#simLog');
+if(!log)return;
+const line=document.createElement('div');
+line.className='log-line'+(type?' '+type:'');
+const ts=new Date().toTimeString().split(' ')[0];
+line.textContent='['+ts+'] '+msg;
+log.appendChild(line);
+log.scrollTop=log.scrollHeight;
+if(log.children.length>200)log.removeChild(log.firstChild);
+}
+
+function getQValue(state,action){
+const key=state+'|'+action;
+if(!(key in simState.qTable))simState.qTable[key]=0;
+return simState.qTable[key];
+}
+
+function setQValue(state,action,val){
+simState.qTable[state+'|'+action]=val;
+}
+
+function getState(scenario){
+const sig=scenario.signal;
+let sigBin;
+if(sig>=-45)sigBin='SN';
+else if(sig>=-65)sigBin='MN';
+else if(sig>=-80)sigBin='WN';
+else sigBin='SL';
+const locked=scenario.locked?1:0;
+const isVuln=scenario.success?1:0;
+const wpsVer=scenario.wps_ver==='2.0'?1:0;
+const attemptBin=Math.min(4,Math.floor(Math.log2(Math.max(1,scenario.attempts))/3));
+return sigBin+'|'+locked+'|'+wpsVer+'|'+isVuln+'|'+attemptBin;
+}
+
+function runSimulation(){
+if(simState.running)return;
+simState.running=true;
+const scIdx=parseInt($('#simScenario').value);
+const sig=parseInt($('#simSignal').value);
+const wpsVer=$('#simWps').value;
+const locked=$('#simLocked').checked;
+const scenario=JSON.parse(JSON.stringify(DATA.scenarios[scIdx]));
+scenario.signal=sig;
+scenario.wps_ver=wpsVer;
+scenario.locked=locked;
+const state=getState(scenario);
+const actions=['proceed','wait','skip','abort'];
+const lr=0.1,gamma=0.9,epsilon=0.2;
+
+addLog('Starting training on: '+scenario.name,'info');
+addLog('State: '+state+' | Signal: '+sig+'dBm | WPS v'+wpsVer,'info');
+addLog('Locked: '+locked+' | Episodes: 50','info');
+
+simState.episode=0;
+simState.rewards=[];
+simState.actions=[];
+simState.logLines=0;
+
+function step(){
+if(!simState.running||simState.episode>=50){
+simState.running=false;
+addLog('Training complete. Final Q-table: '+Object.keys(simState.qTable).length+' states','info');
+$('#simRun').textContent='RUN TRAINING';
+$('#simEpCount').textContent=simState.episode;
+$('#simQStates').textContent=Object.keys(simState.qTable).length/4|0;
+return;
+}
+$('#simRun').textContent='RUNNING... '+simState.episode+'/50';
+let action;
+if(Math.random()<epsilon){
+action=actions[Math.floor(Math.random()*actions.length)];
+}else{
+const qVals=actions.map(a=>getQValue(state,action));
+const best=Math.max(...qVals);
+const bestActions=actions.filter(a=>getQValue(state,a)===best);
+action=bestActions[Math.floor(Math.random()*bestActions.length)];
+}
+const reward=scenario.success?(action==='proceed'?1:action==='wait'?-0.1:-0.5):
+(action==='abort'?0.8:action==='skip'?0.2:-0.3);
+const noise=(Math.random()-0.5)*0.2;
+const finalReward=reward+noise;
+
+actions.forEach(a=>{
+const old=getQValue(state,a);
+const newVal=a===action?old+lr*(finalReward+gamma*0-old):old;
+setQValue(state,a,newVal);
+});
+
+simState.episode++;
+simState.rewards.push(finalReward);
+simState.actions.push(action);
+
+if(simState.episode%5===0){
+addLog('Ep '+simState.episode+': action='+action+' reward='+finalReward.toFixed(3)+' cumulative='+(simState.rewards.reduce((a,b)=>a+b,0)).toFixed(3),finalReward>0?'info':'warn');
+}
+drawSimChart();
+simState.animId=requestAnimationFrame(step);
+}
+simState.animId=requestAnimationFrame(step);
+}
+
+function drawSimChart(){
+const canvas=$('#simChart');
+if(!canvas)return;
+const rewards=simState.rewards;
+if(!rewards.length)return;
+const cumRewards=[];let cum=0;
+rewards.forEach(r=>{cum+=r;cumRewards.push(cum)});
+drawLineChart(canvas,[{data:cumRewards,color:A.accent,lineWidth:2}],{xLabel:'Episode',yLabel:'Cumulative Reward'});
+}
+
+function resetSimulation(){
+simState.running=false;
+if(simState.animId)cancelAnimationFrame(simState.animId);
+simState.qTable={};simState.episode=0;simState.rewards=[];simState.actions=[];
+$('#simRun').textContent='RUN TRAINING';
+$('#simEpCount').textContent='0';
+$('#simQStates').textContent='0';
+$('#simLog').innerHTML='';
+addLog('Simulation reset.','info');
+const canvas=$('#simChart');
+if(canvas){const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle=A.bg2;ctx.fillRect(0,0,canvas.width,canvas.height);}
+}
+
+function exportModel(){
+const model={version:'sim-'+Date.now(),q_table:{},episodes:simState.episode,scenarios:Object.keys(simState.qTable).length/4|0};
+Object.entries(simState.qTable).forEach(([k,v])=>{model.q_table[k]=v});
+const blob=new Blob([JSON.stringify(model,null,2)],{type:'application/json'});
+const url=URL.createObjectURL(blob);
+const a=document.createElement('a');a.href=url;a.download='ai_agent_model.json';
+a.click();URL.revokeObjectURL(url);
+addLog('Model exported as ai_agent_model.json','info');
+}
+
+buildOverview();
+initInteractive();
+
+window.addEventListener('resize',()=>{
+const activeTab=$('.tab.active');
+if(activeTab){
+const t=activeTab.dataset.tab;
+if(t==='training')drawTrainingCharts();
+if(t==='qtable')drawQTable();
+if(t==='features')drawFeatures();
+if(t==='overview')drawOverview();
+}
+});
+})();
+</script>
+</body>
+</html>

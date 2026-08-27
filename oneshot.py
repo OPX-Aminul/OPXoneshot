@@ -1892,7 +1892,7 @@ from src.utils import REPORTS_DIR
 import src.args
 import src.utils
 
-args = src.args.parseArgs()
+args = None  # Set in main()
 
 # --- Shared WPS regexes (used by both the scan table and the single-AP probe) ---
 _RE_BSS    = re.compile(r'BSS (\S+)( )?\(on \w+\)')
@@ -2321,7 +2321,7 @@ import src.args
 
 from src import logger
 
-args = src.args.parseArgs()
+args = None  # Set in main()
 
 class ConnectionStatus:
     """Stores WPS connection details and status."""
@@ -2810,7 +2810,7 @@ import src.wps.connection
 import src.utils
 import src.args
 
-args = src.args.parseArgs()
+args = None  # Set in main()
 
 class BruteforceStatus:
     """Stores bruteforce details and status."""
@@ -3521,7 +3521,7 @@ class AIAgent:
             self.reward_history = self.reward_history[-500:]
 
         # Periodic RF retrain
-        if len(self.X) % 10 == 0 and self.has_ml:
+        if len(self.X) % 50 == 0 and self.has_ml and len(self.X) >= 50:
             self._train_rf()
 
     # ------------------------------------------------------------------
@@ -3795,6 +3795,7 @@ def checkBssid(bssid: str, interface: str = None):
 
 def main():
     """Main os-e code"""
+    global args
 
     args = src.args.parseArgs()
 
