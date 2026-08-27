@@ -4509,18 +4509,15 @@ class SyncEngine:
         # 4. Sync model files into repo and push to GitHub
         syncModelToRepo(agent)
         if do_git:
-            import subprocess
             cwd = os.path.dirname(os.path.abspath(__file__))
             msg = f'training: community sync, Q({len(agent.q_table)}) obs({len(agent.X)})'
             try:
-                subprocess.run(['git', 'add', '-A'], cwd=cwd, capture_output=True, timeout=30)
-                r = subprocess.run(['git', 'commit', '-m', msg], cwd=cwd,
-                                   capture_output=True, text=True, timeout=30)
+                _git_run(['git', 'add', '-A'], cwd=cwd, timeout=30)
+                r = _git_run(['git', 'commit', '-m', msg], cwd=cwd, timeout=30)
                 if 'nothing to commit' in (r.stdout + r.stderr):
                     print('[sync] No changes to commit')
                 else:
-                    r = subprocess.run(['git', 'push', 'origin'], cwd=cwd,
-                                       capture_output=True, text=True, timeout=120)
+                    r = _git_run(['git', 'push', 'origin'], cwd=cwd, timeout=120)
                     if r.returncode == 0:
                         print(f'[sync] Pushed: {msg}')
                     else:
@@ -4545,6 +4542,20 @@ def _ensure_sync_state():
     return state, state_file
 
 
+def _git_run(args, cwd=None, timeout=120, check=False):
+    """Run a git command with a clean environment.
+
+    The execution environment injects a credential helper via GIT_CONFIG_*
+    env vars that authenticates as a shared bot account.  For the community
+    model sync we must use the repo owner's own credentials (stored helper),
+    so we strip those env overrides before spawning git.
+    """
+    import subprocess
+    env = {k: v for k, v in os.environ.items() if not k.startswith('GIT_CONFIG_')}
+    return subprocess.run(args, cwd=cwd, capture_output=True, text=True,
+                          env=env, timeout=timeout, check=check)
+
+
 def _autoSync(do_git: bool = False):
     """Silent community sync — runs on every run, learns in ~1 second.
 
@@ -4560,14 +4571,12 @@ def _autoSync(do_git: bool = False):
 
     # --- Inline step 1: learn the newest shared model from GitHub ---------
     try:
-        import subprocess
         cwd = os.path.dirname(os.path.abspath(__file__))
         # Fetch + checkout ONLY the models/ dir — no code overwrite, no
         # stash/rebase conflicts. Works for any git clone of the repo.
-        subprocess.run(['git', 'fetch', 'origin'], cwd=cwd,
-                       capture_output=True, timeout=30)
-        subprocess.run(['git', 'checkout', 'origin/main', '--', 'models/'],
-                       cwd=cwd, capture_output=True, timeout=20)
+        _git_run(['git', 'fetch', 'origin'], cwd=cwd, timeout=30)
+        _git_run(['git', 'checkout', 'origin/main', '--', 'models/'],
+                 cwd=cwd, timeout=20)
     except Exception:
         pass
 
@@ -4659,15 +4668,12 @@ def _autoSync(do_git: bool = False):
 
             # optional git push (throttled to once per day)
             if do_git and now - state.get('last_git', 0) > 24 * 3600:
-                import subprocess
                 cwd = os.path.dirname(os.path.abspath(__file__))
                 msg = f'training: auto-sync Q({len(agent.q_table)}) obs({len(agent.X)})'
-                subprocess.run(['git', 'add', '-A'], cwd=cwd, capture_output=True, timeout=30)
-                r = subprocess.run(['git', 'commit', '-m', msg], cwd=cwd,
-                                   capture_output=True, text=True, timeout=30)
+                _git_run(['git', 'add', '-A'], cwd=cwd, timeout=30)
+                r = _git_run(['git', 'commit', '-m', msg], cwd=cwd, timeout=30)
                 if 'nothing to commit' not in (r.stdout + r.stderr):
-                    subprocess.run(['git', 'push', 'origin'], cwd=cwd,
-                                   capture_output=True, text=True, timeout=120)
+                    _git_run(['git', 'push', 'origin'], cwd=cwd, timeout=120)
                     state['last_git'] = now
 
             state['last_sync'] = now
@@ -4768,11 +4774,9 @@ def _communityTraining(args):
 
     if getattr(args, 'pull_model', False):
         # Git pulls the repo (user already has remote configured)
-        import subprocess
         cwd = os.path.dirname(os.path.abspath(__file__))
         try:
-            r = subprocess.run(['git', 'pull', '--ff-only'], cwd=cwd,
-                               capture_output=True, text=True, timeout=120)
+            r = _git_run(['git', 'pull', '--ff-only'], cwd=cwd, timeout=120)
             print(f'[git] {r.stdout.strip()}')
         except Exception as e:
             print(f'[!] Pull failed: {e}')
@@ -4782,7 +4786,6 @@ def _communityTraining(args):
         return True
 
     if getattr(args, 'push_model', False):
-        import subprocess
         cwd = os.path.dirname(os.path.abspath(__file__))
         try:
             # Save the model first
@@ -4790,17 +4793,15 @@ def _communityTraining(args):
             syncModelToRepo(agent)
             agent.finalize()
             msg = f'training: {agent.user_id[:8]} {len(agent.X)} obs, Q({len(agent.q_table)})'
-            r = subprocess.run(['git', 'add', '-A'], cwd=cwd, capture_output=True, timeout=30)
-            r = subprocess.run(['git', 'commit', '-m', msg], cwd=cwd,
-                               capture_output=True, text=True, timeout=30)
+            r = _git_run(['git', 'add', '-A'], cwd=cwd, timeout=30)
+            r = _git_run(['git', 'commit', '-m', msg], cwd=cwd, timeout=30)
             if r.returncode != 0:
                 if 'nothing to commit' in (r.stdout + r.stderr):
                     print('[+] Nothing to push — already up to date')
                     return True
                 print(f'[!] Commit failed: {r.stderr}')
                 return False
-            r = subprocess.run(['git', 'push', 'origin'], cwd=cwd,
-                               capture_output=True, text=True, timeout=120)
+            r = _git_run(['git', 'push', 'origin'], cwd=cwd, timeout=120)
             if r.returncode != 0:
                 print(f'[!] Push failed: {r.stderr}')
                 print('[!] Set your GitHub credentials:  git push  or set GITHUB_TOKEN env')
