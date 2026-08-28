@@ -32,9 +32,9 @@
 
 ![License](https://img.shields.io/badge/License-GPLv3-blue?style=for-the-badge&logo=shield&logoColor=white&animation=flat)
 ![Python](https://img.shields.io/badge/Python-3.8+-yellow?style=for-the-badge&logo=python&logoColor=white)
-![AI Accuracy](https://img.shields.io/badge/AI_Accuracy-98%25-brightgreen?style=for-the-badge&logo=scikit-learn&logoColor=white&animation=flat)
+![AI Accuracy](https://img.shields.io/badge/AI_Accuracy-90.3%25-brightgreen?style=for-the-badge&logo=scikit-learn&logoColor=white&animation=flat)
 ![Benchmark](https://img.shields.io/badge/AZD--EPB-81.3%2F100_EXCELLENT-gold?style=for-the-badge&logo=shield&logoColor=white)
-![Q-Table](https://img.shields.io/badge/Q--Table-4%2C814_States-purple?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMyAyVjEyTDIyIDE3TDEzIDIyVjEyTDIgMTdMMTIgMTJaIi8+PC9zdmc+&logoColor=white)
+![Labels](https://img.shields.io/badge/Labels-420_Classes-9b59b6?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMyAyVjEyTDIyIDE3TDEzIDIyVjEyTDIgMTdMMTIgMTJaIi8+PC9zdmc+&logoColor=white)
 ![Supabase](https://img.shields.io/badge/Community-Supabase-3ecf8e?style=for-the-badge&logo=supabase&logoColor=white)
 ![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub_Actions-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)
 ![Devices](https://img.shields.io/badge/Devices-700%2B+-orange?style=for-the-badge&logo=router&logoColor=white)
@@ -78,12 +78,12 @@
   <sub>RF Cross-Validation</sub>
 </td>
 <td align="center" width="25%">
-  <img src="https://img.shields.io/badge/📊_SCENARIOS-16%2C500+-blue?style=for-the-badge&logo=chart-bar&logoColor=white" alt="Scenarios"><br/>
+  <img src="https://img.shields.io/badge/📊_SCENARIOS-29%2C235+-blue?style=for-the-badge&logo=chart-bar&logoColor=white" alt="Scenarios"><br/>
   <sub>Training Scenarios</sub>
 </td>
 <td align="center" width="25%">
-  <img src="https://img.shields.io/badge/🎮_Q--TABLE-4%2C814_States-purple?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMyAyVjEyTDIyIDE3TDEzIDIyVjEyTDIgMTdMMTIgMTJaIi8+PC9zdmc+&logoColor=white" alt="Q-Table"><br/>
-  <sub>RL Policy States</sub>
+  <img src="https://img.shields.io/badge/🧠_LABELS-420_Classes-purple?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMyAyVjEyTDIyIDE3TDEzIDIyVjEyTDIgMTdMMTIgMTJaIi8+PC9zdmc+&logoColor=white" alt="Labels"><br/>
+  <sub>Decision Classes</sub>
 </td>
 <td align="center" width="25%">
   <img src="https://img.shields.io/badge/🛡️_DEVICES-700%2B+-orange?style=for-the-badge&logo=shield&logoColor=white" alt="Devices"><br/>
@@ -120,7 +120,7 @@
   <sub>Research Databases</sub>
 </td>
 <td align="center" width="33%">
-  <img src="https://img.shields.io/badge/⚡_CAPABILITIES-16-red?style=for-the-badge" alt="Capabilities"><br/>
+  <img src="https://img.shields.io/badge/⚡_CAPABILITIES-35+-red?style=for-the-badge" alt="Capabilities"><br/>
   <sub>AI Advancements</sub>
 </td>
 </tr>
@@ -136,8 +136,8 @@
 <tr>
 <td width="50%">
 
-### 🧠 **Intelligent AI Brain v5.0** ⭐ LATEST
-- 🎯 **7-Learner Ensemble** — RF (0.30) + SGD (0.25) + Q-Table (0.15) + DQN (0.30)
+### 🧠 **Intelligent AI Brain v10.5** ⭐ LATEST
+-  🎯 **7-Learner Ensemble** — RF (0.30) + SGD (0.25) + Q-Table (0.15) + DQN (0.30)
 - 🧠 **Deep Q-Network** — Pure numpy neural RL (16→64→32→4) with experience replay
 - 🏭 **Chipset Fingerprinting** — 8 chipset profiles with per-vendor WPS quirks
 - 🎰 **MAB Delay Tuning** — UCB1 bandit with 10 arms for optimal delay selection
@@ -153,6 +153,9 @@
 - 🤖 **Autonomous Exploit Generator** — Creates custom Python/Bash/C scripts
 - 🧠 **Cognitive Reasoning** — Chain-of-thought analysis
 - 🛡️ **Resilience Manager** — Error recovery and self-healing
+- 🧠 **Decision Engine** — Game theory, Bayesian, OODA, 420 decision classes
+- 📚 **Multi-Language Scripting** — Python/C/Rust/Go/Assembly/Bash exploit generation
+- 🎯 **IQ Training** — 600+ rounds, 29,235 scenarios, meta-learning, adversarial robustness
 
 </td>
 <td width="50%">
@@ -467,16 +470,16 @@ graph TB
 
 | Metric | Value | Status |
 |--------|-------|--------|
-| **RF Accuracy** | **98.12%** | ✅ Excellent |
-| **SGD Accuracy** | **84.56%** | ✅ Good |
-| **Training Scenarios** | **16,500** | ✅ Comprehensive |
-| **Q-Table States** | **4,814** | ✅ Rich Policy |
+| **RF Accuracy** | **90.3%** | ✅ Excellent |
+| **Training Scenarios** | **29,235** | ✅ Comprehensive |
+| **Decision Classes** | **420** | ✅ Rich Policy |
 | **RF Trees** | **200** | ✅ Stable |
-| **RF Max Depth** | **12** | ✅ Deep Patterns |
+| **RF Max Depth** | **20** | ✅ Deep Patterns |
 | **Feature Dimensions** | **16** | ✅ Complete |
-| **Knowledge Sources** | **8** | ✅ Research-backed |
+| **Knowledge Sources** | **15+** | ✅ Research-backed |
 | **CVEs** | **94 (1999-2026)** | ✅ Complete |
-| **Chipset Profiles** | **8** | ✅ Complete |
+| **Training Rounds** | **600+** | ✅ Deep IQ Training |
+| **Languages** | **Python/C/Rust/Go/Bash/ASM** | ✅ Multi-lang |
 
 </td>
 <td width="40%">
@@ -514,15 +517,15 @@ graph TB
 
 ```mermaid
 pie title Training Scenarios (16,500 Total)
-    "Protocol 802.11" : 2000
-    "WPS Vulnerabilities" : 2000
-    "Reaver Output" : 2000
-    "Bully Output" : 2000
-    "Chipset Specific" : 2000
-    "Edge Cases" : 2000
-    "RF Telemetry" : 1500
-    "Zero-Day" : 1500
-    "Multi-Stage" : 1500
+    "WiFi Protocol 802.11" : 3000
+    "WPS Vulnerabilities" : 3000
+    "Script/Payload Making" : 4000
+    "Decision Making/IQ" : 5000
+    "Chipset Specific" : 3000
+    "Firmware/IoT" : 2000
+    "Zero-Day Generation" : 3000
+    "Multi-Language" : 3000
+    "Edge Cases" : 3235
 ```
 
 ### 🧪 Decision Accuracy
