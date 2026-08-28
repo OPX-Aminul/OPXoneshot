@@ -1,8 +1,8 @@
 {
   "version": "v5.0.0",
-  "model_version": "v5.0.0-retrained",
-  "event_count": 17000,
-  "cv_accuracy_rf": 0.9812,
+  "model_version": "v6.0.0-200rounds",
+  "event_count": 10583,
+  "cv_accuracy_rf": 1.0,
   "cv_accuracy_sgd": 0.8456,
   "q_table_states": 149,
   "knowledge_gaps_filled": [
@@ -20,9 +20,21 @@
     "Signal degradation",
     "Complex multi-stage",
     "WPS version specific",
-    "Chipset edge cases"
+    "Chipset edge cases",
+    "wifi7_mlo",
+    "wifi7_320mhz",
+    "p2p_direct",
+    "nfc_wps",
+    "karma_mana",
+    "evil_twin_captive",
+    "sae_dragonblood",
+    "enterprise_radius",
+    "firmware_uart",
+    "crypto_entropy",
+    "memory_overflow",
+    "network_mitm"
   ],
-  "training_scenarios": 17000,
+  "training_scenarios": 10583,
   "advancements": [
     "chipset_fingerprinting",
     "mab_delay",
