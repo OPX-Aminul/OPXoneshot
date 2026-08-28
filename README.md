@@ -475,7 +475,7 @@ graph TB
 | **RF Max Depth** | **12** | ✅ Deep Patterns |
 | **Feature Dimensions** | **16** | ✅ Complete |
 | **Knowledge Sources** | **8** | ✅ Research-backed |
-| **CVEs** | **13 (2012-2026)** | ✅ Updated |
+| **CVEs** | **94 (1999-2026)** | ✅ Complete |
 | **Chipset Profiles** | **8** | ✅ Complete |
 
 </td>
@@ -571,12 +571,58 @@ OPX maintains a comprehensive database of **700+ WPS-vulnerable devices** across
 </tr>
 </table>
 
-### 🔒 Known CVEs
+### 🔒 CVE Database — 94 Vulnerabilities (1999-2026)
 
-| CVE | Device | Type | Status |
-|-----|--------|------|--------|
-| CVE-2023-33538 | TP-Link routers | Command Injection | 🔴 Critical |
-| Pixie Dust (2025) | 80%+ devices | Offline PIN Recovery | 🔴 Active |
+<table>
+<tr>
+<td width="50%">
+
+#### 📊 Coverage Summary
+| Metric | Value |
+|--------|-------|
+| **Total CVEs** | **94** |
+| **Time Span** | **1999-2026 (27 years)** |
+| **Vendors** | **13** (TP-Link, D-Link, Cisco, etc.) |
+| **Critical** | **53 CVEs** |
+| **High** | **34 CVEs** |
+| **Command Injection** | **18 CVEs** |
+| **Auth Bypass** | **9 CVEs** |
+| **KRACK Attack** | **9 CVEs** |
+
+</td>
+<td width="50%">
+
+#### 🏆 Key Milestones
+| Year | Event | CVEs |
+|------|-------|------|
+| 1999 | WEP IV reuse | 1 |
+| 2012 | WPS brute force | 3 |
+| 2014 | Pixie Dust | 3 |
+| 2017 | **KRACK attack** | 13 |
+| 2019 | Kr00k + Dragonblood | 7 |
+| 2020 | **FragAttacks** | 13 |
+| 2021 | Realtek SDK crisis | 6 |
+| 2023 | MediaTek overflow | 5 |
+| 2024 | Zero-click RCE | 5 |
+
+</td>
+</tr>
+</table>
+
+#### 🔴 Critical CVEs (Top 10)
+
+| CVE | Vendor | Type | CVSS |
+|-----|--------|------|------|
+| CVE-2017-13077 | All | KRACK WPA2 Handshake | 9.8 |
+| CVE-2023-20198 | Cisco | IOS XE Priv Esc | 10.0 |
+| CVE-2024-20017 | MediaTek | Zero-click WiFi RCE | 9.8 |
+| CVE-2022-27610 | Realtek | SDK Command Injection | 9.8 |
+| CVE-2021-35394 | Realtek | HTTP Server RCE | 9.8 |
+| CVE-2020-10882 | TP-Link | Archer A7 Buffer Overflow | 9.8 |
+| CVE-2019-15126 | Broadcom | Kr00k EAPOL Decryption | 7.5 |
+| CVE-2015-0558 | Atheros | WPS PIN Derivation | 9.8 |
+| CVE-2012-4366 | Broadcom | WPS PIN Brute Force | 9.8 |
+| CVE-2024-21833 | TP-Link | Archer OS Command Injection | 9.8 |
 
 ---
 
@@ -709,6 +755,7 @@ OPXoneshot/
 ├── wifi_master_knowledge.py      # 📖 WiFi protocol knowledge
 ├── wps_knowledge_base.py         # 🔒 WPS vulnerability database
 ├── offensive_reasoning_engine.py # 🧠 First-principles reasoning
+├── cve_database.py               # 📋 94 CVEs (1999-2026)
 ├── supabase_setup.sql            # 🗄️ One-time Supabase schema
 ├── vulnwsc_new.txt               # 📋 Additional vulnerable devices
 ├── requirements.txt              # 📦 Dependencies
