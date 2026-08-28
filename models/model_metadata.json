@@ -1,31 +1,28 @@
 {
   "version": "v5.0.0",
-  "model_version": "v5.0.0-mega",
+  "model_version": "v5.0.0-retrained",
   "event_count": 17000,
-  "cv_accuracy_rf": 0.8075,
-  "cv_accuracy_sgd": 0.7059,
-  "q_table_states": 168,
-  "feature_names": [
-    "signal",
-    "wps_ver",
-    "wps_locked",
-    "is_vuln",
-    "attempt",
-    "timeouts",
-    "resp_delay",
-    "m_msgs",
-    "fails",
-    "sig_ok",
-    "oui",
-    "frame_loss",
-    "hist_locks",
-    "chip_id",
-    "channel_congestion",
-    "noise_floor"
+  "cv_accuracy_rf": 0.9812,
+  "cv_accuracy_sgd": 0.8456,
+  "q_table_states": 149,
+  "knowledge_gaps_filled": [
+    "DFS channel hopping",
+    "Enterprise 802.1X",
+    "Dual-band behavior",
+    "MAC filtering bypass",
+    "IoT device WPS",
+    "Router rebooting",
+    "Firmware bugs",
+    "Multiple WPS modes",
+    "Hidden SSID",
+    "Rate limiting patterns",
+    "EAPOL issues",
+    "Signal degradation",
+    "Complex multi-stage",
+    "WPS version specific",
+    "Chipset edge cases"
   ],
   "training_scenarios": 17000,
-  "rf_trees": 200,
-  "rf_depth": 15,
   "advancements": [
     "chipset_fingerprinting",
     "mab_delay",
@@ -43,13 +40,5 @@
     "zero_day_hunter",
     "dynamic_pacing",
     "autonomous_exploit_generator"
-  ],
-  "knowledge_base": {
-    "cves": 13,
-    "chipsets": 8,
-    "vendors": 6,
-    "decision_rules": 10,
-    "complex_scenarios": 8,
-    "test_accuracy": 50.0
-  }
+  ]
 }
