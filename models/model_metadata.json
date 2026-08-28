@@ -43,5 +43,13 @@
     "zero_day_hunter",
     "dynamic_pacing",
     "autonomous_exploit_generator"
-  ]
+  ],
+  "knowledge_base": {
+    "cves": 13,
+    "chipsets": 8,
+    "vendors": 6,
+    "decision_rules": 10,
+    "complex_scenarios": 8,
+    "test_accuracy": 50.0
+  }
 }
