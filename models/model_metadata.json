@@ -1,8 +1,8 @@
 {
   "version": "v5.0.0",
-  "model_version": "v6.0.0-200rounds",
-  "event_count": 10583,
-  "cv_accuracy_rf": 1.0,
+  "model_version": "v8.5.0-final-200rounds",
+  "event_count": 19235,
+  "cv_accuracy_rf": 0.9033012737197816,
   "cv_accuracy_sgd": 0.8456,
   "q_table_states": 149,
   "knowledge_gaps_filled": [
