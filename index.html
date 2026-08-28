@@ -325,7 +325,7 @@ footer{border-top:1px solid rgba(255,255,255,.08);padding:60px 0 42px;position:r
     <div class="badge-row">
       <span class="badge" data-reveal="up" style="--i:0">GPLv3</span>
       <span class="badge" data-reveal="up" style="--i:1">Python 3.8+</span>
-      <span class="badge v" data-reveal="up" style="--i:2">Model v5.0.0-final</span>
+      <span class="badge v" data-reveal="up" style="--i:2">Model v10.5.0-iq</span>
       <span class="badge c" data-reveal="up" style="--i:3">DQN Neural RL</span>
       <span class="badge c" data-reveal="up" style="--i:4">Supabase Sync</span>
       <span class="badge a" data-reveal="up" style="--i:5">GitHub Actions CI</span>
@@ -365,7 +365,7 @@ footer{border-top:1px solid rgba(255,255,255,.08);padding:60px 0 42px;position:r
     <div class="sec-line"></div>
   </div>
   <div class="stats-grid">
-    <div class="stat glass" data-reveal="zoom" style="--i:0"><div class="num" data-count="98.12" data-dec="2" data-suffix="%">0</div><div class="lbl">RF ACCURACY</div><div class="sub">v5.0 master brain</div></div>
+    <div class="stat glass" data-reveal="zoom" style="--i:0"><div class="num" data-count="90.3" data-dec="1" data-suffix="%">0</div><div class="lbl">RF ACCURACY</div><div class="sub">v10.5 IQ-trained brain</div></div>
     <div class="stat glass c" data-reveal="zoom" style="--i:1"><div class="num" data-count="16500">0</div><div class="lbl">TRAINING SCENARIOS</div><div class="sub">9 clusters, 8 knowledge sources</div></div>
     <div class="stat glass" data-reveal="zoom" style="--i:2"><div class="num" data-count="4814">0</div><div class="lbl">Q-TABLE STATES</div><div class="sub">RL policy</div></div>
     <div class="stat glass a" data-reveal="zoom" style="--i:3"><div class="num" data-count="700" data-suffix="+">0</div><div class="lbl">VULNERABLE DEVICES</div><div class="sub">global database</div></div>
@@ -385,8 +385,8 @@ footer{border-top:1px solid rgba(255,255,255,.08);padding:60px 0 42px;position:r
     <div class="sec-line"></div>
   </div>
   <div class="feat-grid">
-    <div class="card glass tilt" data-reveal="flip" style="--i:0"><div class="ic">0</div><h3>Intelligent AI Brain v5.0</h3><ul>
-      <li><b>RF 98% Accuracy</b> 200 trees, 16,500 scenarios</li>
+    <div class="card glass tilt" data-reveal="flip" style="--i:0"><div class="ic">0</div><h3>Intelligent AI Brain v10.5</h3><ul>
+      <li><b>RF 90.3% Accuracy</b> 200 trees, 29,235 scenarios</li>
       <li><b>16 AI Capabilities</b> all fully integrated</li>
       <li><b>8 Knowledge Sources</b> research-backed training</li>
       <li><b>Autonomous Exploit Gen</b> custom Python/Bash/C</li>
@@ -445,7 +445,7 @@ footer{border-top:1px solid rgba(255,255,255,.08);padding:60px 0 42px;position:r
       <div class="node"><b>Learn + Sync</b><small>Supabase community</small></div>
     </div>
     <div class="learners">
-      <div class="learner"><div class="nm">Random Forest</div><div class="wt">98.12% accuracy</div><div class="bar"><i style="--w:98%"></i></div><div class="desc">200 trees, depth 12. 16,500 training scenarios from 8 knowledge sources.</div></div>
+      <div class="learner"><div class="nm">Random Forest</div><div class="wt">90.3% accuracy</div><div class="bar"><i style="--w:90%"></i></div><div class="desc">200 trees, depth 20. 29,235 training scenarios from 15+ knowledge sources.</div></div>
       <div class="learner"><div class="nm">SGD Classifier</div><div class="wt">84.56% accuracy</div><div class="bar"><i style="--w:85%"></i></div><div class="desc">Online incremental fit. Adapts live on every new observation.</div></div>
       <div class="learner"><div class="nm">Q-Table RL</div><div class="wt">4,814 states</div><div class="bar"><i style="--w:60%"></i></div><div class="desc">4,814 policy states mapping situations to optimal actions.</div></div>
       <div class="learner"><div class="nm">Autonomous Exploit Gen</div><div class="wt">6 attack templates</div><div class="bar"><i style="--w:75%"></i></div><div class="desc">Generates custom Python/Bash/C scripts for unknown devices.</div></div>
@@ -701,10 +701,10 @@ footer{border-top:1px solid rgba(255,255,255,.08);padding:60px 0 42px;position:r
     ['dim','  #  BSSID               CH  SIGNAL  WPS  LOCK  ESSID'],['i','  1  AA:BB:CC:DD:EE:FF    6   -42    v2   No    MyWiFi'],
     ['dim','  2  11:22:33:44:55:66   11   -58    v1   Yes   Neighbor'],['dim','  3  DE:AD:BE:EF:00:11    1   -71    v2   No    CafeWiFi'],['dim',''],
     ['p','[*] Selected: MyWiFi (AA:BB:CC:DD:EE:FF)'],['dim','    Signal: -42 dBm | WPS v2.0 | Locked: False'],
-    ['i','    Model: RF 0.98 | SGD ready | Q(3735 states) | DQN active'],['dim',''],
+    ['i','    Model: RF 0.90 | 420 labels | 29K scenarios | IQ-trained'],['dim',''],
     ['w','[AI] Phase 1: Checking vulnerable list...'],['p','[AI] Decision: PROCEED (confidence: 1.00)'],
     ['p','[AI] Trying PIN: 12345670 (Common default)'],['ok','[AI] SUCCESS! PIN: 12345670'],['dim',''],
-    ['i','[AI] Model saved: Brain updated (250000 obs, 3735 Q-states)'],['i','[AI] Community sync: uploaded to Supabase'],
+    ['i','[AI] Model saved: Brain updated (29235 obs, 420 labels)'],['i','[AI] Community sync: uploaded to Supabase'],
     ['w','[AI] Web Intel: Unknown vendor detected -> searching CVEs...'],['ok','[AI] Web Intel: Found 3 potential vulnerabilities'],
     ['ok','[AI] Brain updated: New patterns learned from web search']];
   var term=document.getElementById('term'),li=0,tObs=new IntersectionObserver(function(es){if(es[0].isIntersecting){tObs.disconnect();runTerm()}},{threshold:.3});
