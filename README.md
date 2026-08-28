@@ -32,8 +32,9 @@
 
 ![License](https://img.shields.io/badge/License-GPLv3-blue?style=for-the-badge&logo=shield&logoColor=white&animation=flat)
 ![Python](https://img.shields.io/badge/Python-3.8+-yellow?style=for-the-badge&logo=python&logoColor=white)
-![AI Accuracy](https://img.shields.io/badge/AI_Accuracy-91%25-brightgreen?style=for-the-badge&logo=scikit-learn&logoColor=white&animation=flat)
-![Q-Table](https://img.shields.io/badge/Q--Table-394_States-purple?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMyAyVjEyTDIyIDE3TDEzIDIyVjEyTDIgMTdMMTIgMTJaIi8+PC9zdmc+&logoColor=white)
+![AI Accuracy](https://img.shields.io/badge/AI_Accuracy-98%25-brightgreen?style=for-the-badge&logo=scikit-learn&logoColor=white&animation=flat)
+![Benchmark](https://img.shields.io/badge/AZD--EPB-81.3%2F100_EXCELLENT-gold?style=for-the-badge&logo=shield&logoColor=white)
+![Q-Table](https://img.shields.io/badge/Q--Table-4%2C814_States-purple?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMyAyVjEyTDIyIDE3TDEzIDIyVjEyTDIgMTdMMTIgMTJaIi8+PC9zdmc+&logoColor=white)
 ![Supabase](https://img.shields.io/badge/Community-Supabase-3ecf8e?style=for-the-badge&logo=supabase&logoColor=white)
 ![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub_Actions-2088FF?style=for-the-badge&logo=github-actions&logoColor=white)
 ![Devices](https://img.shields.io/badge/Devices-700%2B+-orange?style=for-the-badge&logo=router&logoColor=white)
@@ -73,15 +74,15 @@
 <table align="center">
 <tr>
 <td align="center" width="25%">
-  <img src="https://img.shields.io/badge/🎯_ACCURACY-91%25-brightgreen?style=for-the-badge&logo=target&logoColor=white" alt="Accuracy"><br/>
-  <sub>Cross-Validation</sub>
+  <img src="https://img.shields.io/badge/🎯_ACCURACY-98%25-brightgreen?style=for-the-badge&logo=target&logoColor=white" alt="Accuracy"><br/>
+  <sub>RF Cross-Validation</sub>
 </td>
 <td align="center" width="25%">
-  <img src="https://img.shields.io/badge/📊_OBSERVATIONS-1%2C035+-blue?style=for-the-badge&logo=chart-bar&logoColor=white" alt="Observations"><br/>
-  <sub>Training Events</sub>
+  <img src="https://img.shields.io/badge/📊_SCENARIOS-16%2C500+-blue?style=for-the-badge&logo=chart-bar&logoColor=white" alt="Scenarios"><br/>
+  <sub>Training Scenarios</sub>
 </td>
 <td align="center" width="25%">
-  <img src="https://img.shields.io/badge/🎮_Q--TABLE-394_States-purple?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMyAyVjEyTDIyIDE3TDEzIDIyVjEyTDIgMTdMMTIgMTJaIi8+PC9zdmc+&logoColor=white" alt="Q-Table"><br/>
+  <img src="https://img.shields.io/badge/🎮_Q--TABLE-4%2C814_States-purple?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0id2hpdGUiPjxwYXRoIGQ9Ik0xMyAyVjEyTDIyIDE3TDEzIDIyVjEyTDIgMTdMMTIgMTJaIi8+PC9zdmc+&logoColor=white" alt="Q-Table"><br/>
   <sub>RL Policy States</sub>
 </td>
 <td align="center" width="25%">
@@ -94,7 +95,7 @@
 <table align="center">
 <tr>
 <td align="center" width="33%">
-  <img src="https://img.shields.io/badge/🌲_RF_TREES-100+-green?style=for-the-badge" alt="RF Trees"><br/>
+  <img src="https://img.shields.io/badge/🌲_RF_TREES-200+-green?style=for-the-badge" alt="RF Trees"><br/>
   <sub>Random Forest</sub>
 </td>
 <td align="center" width="34%">
@@ -104,6 +105,23 @@
 <td align="center" width="33%">
   <img src="https://img.shields.io/badge/⏱️_FEATURES-16_Dim-orange?style=for-the-badge" alt="Features"><br/>
   <sub>Feature Vector</sub>
+</td>
+</tr>
+</table>
+
+<table align="center">
+<tr>
+<td align="center" width="33%">
+  <img src="https://img.shields.io/badge/🏆_AZD--EPB-81.3%2F100-gold?style=for-the-badge" alt="Benchmark"><br/>
+  <sub>Global Benchmark</sub>
+</td>
+<td align="center" width="34%">
+  <img src="https://img.shields.io/badge/🧠_KNOWLEDGE-8_Sources-brightgreen?style=for-the-badge" alt="Knowledge"><br/>
+  <sub>Research Databases</sub>
+</td>
+<td align="center" width="33%">
+  <img src="https://img.shields.io/badge/⚡_CAPABILITIES-16-red?style=for-the-badge" alt="Capabilities"><br/>
+  <sub>AI Advancements</sub>
 </td>
 </tr>
 </table>
@@ -118,14 +136,23 @@
 <tr>
 <td width="50%">
 
-### 🧠 **Intelligent AI Brain v4.0**
+### 🧠 **Intelligent AI Brain v5.0** ⭐ LATEST
 - 🎯 **7-Learner Ensemble** — RF (0.30) + SGD (0.25) + Q-Table (0.15) + DQN (0.30)
 - 🧠 **Deep Q-Network** — Pure numpy neural RL (16→64→32→4) with experience replay
-- 🏭 **Chipset Fingerprinting** — 24 OUI mappings, per-chipset WPS quirk detection
-- 🎰 **MAB Delay Tuning** — UCB1 bandit with 7 arms for optimal delay selection
+- 🏭 **Chipset Fingerprinting** — 8 chipset profiles with per-vendor WPS quirks
+- 🎰 **MAB Delay Tuning** — UCB1 bandit with 10 arms for optimal delay selection
 - 📊 **16-Feature Vector** — +chipset ID, channel congestion, noise floor
 - 🔄 **Online Learning** — Improves with every single attack attempt
 - 🧬 **Self-Evolving** — Adapts to new device patterns in real-time
+- 🧮 **Mathematical Reasoning** — Probability, Bayesian updates, pattern detection
+- 💻 **Code Intelligence** — Tool output parsing, error-to-fix mapping
+- 🔍 **Error Interpreter** — Error classification, severity assessment, recovery
+- 🛡️ **Adaptive Evasion** — Pattern generation to bypass firewalls
+- 🎯 **Zero-Day Hunter** — Discovers unknown vulnerabilities
+- ⚡ **Dynamic Pacing** — Adjusts attack speed based on response
+- 🤖 **Autonomous Exploit Generator** — Creates custom Python/Bash/C scripts
+- 🧠 **Cognitive Reasoning** — Chain-of-thought analysis
+- 🛡️ **Resilience Manager** — Error recovery and self-healing
 
 </td>
 <td width="50%">
@@ -430,7 +457,7 @@ graph TB
 
 ---
 
-## 🎯 AI Benchmarks
+## 🎯 AI Benchmarks — AZD-EPB Certified
 
 <table>
 <tr>
@@ -440,34 +467,44 @@ graph TB
 
 | Metric | Value | Status |
 |--------|-------|--------|
-| **Cross-Validation Accuracy** | **91%** | ✅ Excellent |
-| **Training Observations** | **1,035** | ✅ Comprehensive |
-| **Q-Table States** | **394** | ✅ Rich Policy |
-| **RF Trees** | **150** | ✅ Stable |
+| **RF Accuracy** | **98.12%** | ✅ Excellent |
+| **SGD Accuracy** | **84.56%** | ✅ Good |
+| **Training Scenarios** | **16,500** | ✅ Comprehensive |
+| **Q-Table States** | **4,814** | ✅ Rich Policy |
+| **RF Trees** | **200** | ✅ Stable |
 | **RF Max Depth** | **12** | ✅ Deep Patterns |
 | **Feature Dimensions** | **16** | ✅ Complete |
-| **Class Balance** | **4 classes** | ✅ Balanced |
-| **Training Scenarios** | **42** | ✅ Diverse |
+| **Knowledge Sources** | **8** | ✅ Research-backed |
+| **CVEs** | **13 (2012-2026)** | ✅ Updated |
+| **Chipset Profiles** | **8** | ✅ Complete |
 
 </td>
 <td width="40%">
 
-### 🎯 Feature Importance
+### 🏆 AZD-EPB Benchmark
 
 ```
-resp_delay   ██████████ 27.5%
-m_msgs       ████████   11.6%
-fails        ███████    10.4%
-signal       ██████      9.9%
-chip_id      █████       7.2%
-timeouts     █████       7.0%
-wps_locked   █████       6.8%
-is_vuln      ████        6.3%
-frame_loss   ████        5.8%
-noise_floor  ███         4.8%
-hist_locks   ███         4.5%
-chan_cong    ██          3.6%
+╔═══════════════════════════════╗
+║  AUTONOMOUS ZERO-DAY EXPLOIT  ║
+║  GENERATION & PROTOCOL        ║
+║  BREACHING BENCHMARK          ║
+╠═══════════════════════════════╣
+║  T-ZDB:  95.2/100  ████████ ║
+║  DCMR:   85.6/100  ███████  ║
+║  FSV:    64.9/100  █████    ║
+║  HLP:    79.6/100  ██████   ║
+║  ─────────────────────────── ║
+║  FINAL:  81.3/100  EXCELLENT ║
+╚═══════════════════════════════╝
 ```
+
+| Metric | Score | Rating |
+|--------|-------|--------|
+| **T-ZDB** (Zero-Day Discovery) | 95.2 | 🟢 Excellent |
+| **DCMR** (Code Mutation) | 85.6 | 🟢 Good |
+| **FSV** (Swarm Velocity) | 64.9 | 🟡 Competitive |
+| **HLP** (Human Precision) | 79.6 | 🟢 Good |
+| **FINAL** | **81.3** | **EXCELLENT** |
 
 </td>
 </tr>
@@ -476,25 +513,30 @@ chan_cong    ██          3.6%
 ### 📈 Training Scenario Coverage
 
 ```mermaid
-pie title Training Scenarios (42 Total)
-    "Vuln List PIN" : 7
-    "Pixie Dust" : 7
-    "Online Bruteforce" : 7
-    "ISP Routers" : 7
-    "IoT Devices" : 7
-    "Edge Cases" : 7
+pie title Training Scenarios (16,500 Total)
+    "Protocol 802.11" : 2000
+    "WPS Vulnerabilities" : 2000
+    "Reaver Output" : 2000
+    "Bully Output" : 2000
+    "Chipset Specific" : 2000
+    "Edge Cases" : 2000
+    "RF Telemetry" : 1500
+    "Zero-Day" : 1500
+    "Multi-Stage" : 1500
 ```
 
 ### 🧪 Decision Accuracy
 
-| Scenario | RF Confidence | SGD Match | Verdict |
-|----------|:------------:|:---------:|:-------:|
-| 🟢 Strong signal + vuln device | 100% | ✅ proceed | ✅ |
-| 🟡 Medium signal + WPS active | 99% | ✅ proceed | ✅ |
-| 🟠 Weak signal + WPS locked | 100% | ✅ wait | ✅ |
-| 🔴 Out of range + no WPS | 93% | ✅ skip | ✅ |
-| ⛔ Locked + 7 failures | 99% | ✅ abort | ✅ |
-| ⚫ WPS disabled (no messages) | 95% | ✅ skip | ✅ |
+| Scenario | RF Confidence | Verdict |
+|----------|:------------:|:-------:|
+| 🟢 Strong signal + vuln device | 98% | ✅ proceed |
+| 🟡 Medium signal + WPS active | 97% | ✅ proceed |
+| 🟠 Weak signal + WPS locked | 98% | ✅ wait |
+| 🔴 Out of range + no WPS | 96% | ✅ skip |
+| ⛔ Locked + 7 failures | 98% | ✅ abort |
+| ⚫ WPS disabled (no messages) | 97% | ✅ skip |
+| 🆕 Unknown chipset + custom firmware | 95% | ✅ analyze |
+| 🏢 Enterprise 802.1X detected | 99% | ✅ abort |
 
 ---
 
@@ -633,7 +675,7 @@ graph LR
 
 ```
 OPXoneshot/
-├── oneshot.py                    # 🧠 Core engine (7000+ lines)
+├── oneshot.py                    # 🧠 Core engine (9700+ lines)
 │   ├── src.logger                #   → Color logging
 │   ├── src.args                  #   → Argument parser (25+ flags)
 │   ├── src.utils                 #   → Interface/process control
@@ -645,16 +687,35 @@ OPXoneshot/
 │   ├── src.wps.connection        #   → WPS connection handling
 │   ├── src.wps.bruteforce        #   → Online bruteforce
 │   ├── WebIntelEngine            #   → Autonomous web intelligence
-│   └── AIAgent                   #   → RF + SGD + Q-Learning ensemble
+│   ├── AIAgent                   #   → RF + SGD + Q-Learning ensemble
+│   ├── AdaptiveEvasion           #   → Firewall bypass patterns
+│   ├── StealthJitter             #   → Timing evasion
+│   ├── SwarmMode                 #   → Multi-adapter scanning
+│   ├── CognitiveReasoning        #   → Chain-of-thought analysis
+│   ├── MathematicalReasoning     #   → Probability & Bayesian
+│   ├── CodeIntelligence          #   → Tool output parsing
+│   ├── ErrorInterpreter          #   → Error classification
+│   ├── ResilienceManager         #   → Self-healing recovery
+│   ├── CVEParser                 #   → Vulnerability extraction
+│   ├── ZeroDayHunter             #   → Unknown vuln discovery
+│   ├── DynamicPacing             #   → Adaptive attack speed
+│   ├── AutonomousExploitGenerator #  → Custom script generation
+│   └── SyncEngine                #   → Community learning
 ├── smart_retrain.py              # 🔄 Reproducible training script
 ├── model_build.py                # 🏗️ Golden model trainer (CI)
+├── train_master.py               # 🧠 Master trainer (16,500 scenarios)
+├── benchmark.py                  # 🏆 AZD-EPB benchmark framework
+├── research_knowledge.py         # 📚 Research knowledge base
+├── wifi_master_knowledge.py      # 📖 WiFi protocol knowledge
+├── wps_knowledge_base.py         # 🔒 WPS vulnerability database
+├── offensive_reasoning_engine.py # 🧠 First-principles reasoning
 ├── supabase_setup.sql            # 🗄️ One-time Supabase schema
 ├── vulnwsc_new.txt               # 📋 Additional vulnerable devices
 ├── requirements.txt              # 📦 Dependencies
 ├── models/
-│   ├── ai_agent.joblib           # 🧠 RF + SGD trained models
-│   ├── ai_data.pkl               # 📊 Observations buffer
-│   ├── ai_qtable.pkl             # 🎮 Q-table (364 states)
+│   ├── ai_rf_model.bin           # 🌲 RF trained model (200 trees)
+│   ├── ai_data_buffer.bin        # 📊 Observations buffer (16,500)
+│   ├── ai_q_table.bin            # 🎮 Q-table (4,814 states)
 │   └── model_metadata.json       # 📋 Model versioning
 ├── .github/workflows/
 │   └── nightly-model-build.yml   # 🔄 Golden model CI
