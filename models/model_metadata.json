@@ -1,8 +1,8 @@
 {
   "version": "v5.0.0",
-  "model_version": "v8.5.0-final-200rounds",
-  "event_count": 19235,
-  "cv_accuracy_rf": 0.9033012737197816,
+  "model_version": "v10.5.0-iq-final",
+  "event_count": 29235,
+  "cv_accuracy_rf": 0.6764836668376946,
   "cv_accuracy_sgd": 0.8456,
   "q_table_states": 149,
   "knowledge_gaps_filled": [
@@ -34,7 +34,7 @@
     "memory_overflow",
     "network_mitm"
   ],
-  "training_scenarios": 10583,
+  "training_scenarios": 29235,
   "advancements": [
     "chipset_fingerprinting",
     "mab_delay",
