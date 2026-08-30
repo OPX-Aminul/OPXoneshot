@@ -238,21 +238,39 @@
 
 ## 🚀 Quick Start
 
-### One-Command Install
+### One-Command Install (Recommended)
+
+**Just two commands — everything installs automatically:**
 
 ```bash
-# Clone the repository
-git clone https://github.com/OPX-Aminul/OPXoneshot.git
-cd OPXoneshot
+git clone https://github.com/OPX-Aminul/OPXoneshot.git && cd OPXoneshot && sudo bash install.sh
+```
 
-# Install globally (creates wifi4 command)
-sudo python3 oneshot.py --install
+Or use the Python installer:
 
-# Run from anywhere
+```bash
+git clone https://github.com/OPX-Aminul/OPXoneshot.git && cd OPXoneshot && sudo python3 oneshot.py --install
+```
+
+**What happens automatically:**
+
+| Step | What Gets Installed |
+|------|---------------------|
+| 1 | 🐧 Detects your Linux distro (Alpine/Kali/Ubuntu/Debian/Arch/Fedora) |
+| 2 | 📦 Installs all system packages (Python, wireless tools, build tools) |
+| 3 | 🧠 Installs ML packages (scikit-learn, numpy, joblib) |
+| 4 | 📥 Downloads latest AI brain model from GitHub Releases |
+| 5 | ⚡ Creates global `wifi4` + `oneshot` commands |
+| 6 | ✅ Verifies everything works |
+
+**Supported distros:** Alpine Linux, Kali Linux, Parrot OS, Ubuntu, Debian, Arch Linux, Manjaro, Fedora, CentOS, RHEL
+
+```bash
+# After install — run from anywhere:
 wifi4
 ```
 
-### Direct Usage
+### Direct Usage (Without Install)
 
 ```bash
 # AI Autonomous Mode (Recommended)
