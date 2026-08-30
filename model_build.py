@@ -145,7 +145,7 @@ def pull_rows(limit=MAX_PULL_ROWS):
     offset = 0
     while len(rows) < limit:
         params = {
-            'select': 'id,event_id,ts,user_id,signal,locked,action,success,reward,profile',
+            'select': 'id,event_id,ts,user_id,signal,locked,action,success,reward,profile,bssid,essid,pin,firmware,chipset,mac',
             'order': 'id.desc',
             'limit': str(min(MAX_EVENTS_PER_REQ * 5, 2000)),
             'offset': str(offset),
@@ -199,6 +199,14 @@ def main():
             float(r.get('chip_id', 0)) / 7.0,
             float(r.get('channel_congestion', 0.0)),
             (float(r.get('noise_floor', -90.0)) + 100.0) / 100.0,
+            # NEW: Device identity features for richer model learning
+            # chipset as hash bucket (0-6): broadcom=0, mediatek=1, realtek=2, atheros=3, qualcomm=4, other=5, unknown=6
+            {'broadcom': 0.0, 'mediatek': 1.0, 'realtek': 2.0, 'atheros': 3.0, 'qualcomm': 4.0}.get(
+                (r.get('chipset') or '').lower().split()[0] if r.get('chipset') else '', 6.0) / 6.0,
+            # pin length as feature (8-digit=1.0, 7-digit=0.875, empty=0.0)
+            len(str(r.get('pin', '') or '')) / 8.0 if r.get('pin') else 0.0,
+            # has_bssid as binary feature (known target = 1.0)
+            1.0 if r.get('bssid') else 0.0,
         ]
         X.append(feat)
         y.append('proceed' if r.get('success') else 'skip')

@@ -19,8 +19,23 @@ CREATE TABLE IF NOT EXISTS public.training_data (
   quality    NUMERIC,
   profile    TEXT,
   v          TEXT,
-  ts         TIMESTAMPTZ NOT NULL DEFAULT now()
+  ts         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- Device identity fields (added for full brain memory)
+  bssid      TEXT DEFAULT '',
+  essid      TEXT DEFAULT '',
+  pin        TEXT DEFAULT '',
+  firmware   TEXT DEFAULT '',
+  chipset    TEXT DEFAULT '',
+  mac        TEXT DEFAULT ''
 );
+
+-- Migration: add columns if table already exists (idempotent)
+ALTER TABLE public.training_data ADD COLUMN IF NOT EXISTS bssid    TEXT DEFAULT '';
+ALTER TABLE public.training_data ADD COLUMN IF NOT EXISTS essid    TEXT DEFAULT '';
+ALTER TABLE public.training_data ADD COLUMN IF NOT EXISTS pin      TEXT DEFAULT '';
+ALTER TABLE public.training_data ADD COLUMN IF NOT EXISTS firmware TEXT DEFAULT '';
+ALTER TABLE public.training_data ADD COLUMN IF NOT EXISTS chipset  TEXT DEFAULT '';
+ALTER TABLE public.training_data ADD COLUMN IF NOT EXISTS mac      TEXT DEFAULT '';
 
 -- ──────────────────────────────────────────────────────────────
 -- 2. Indexes (safe: create if missing, skip if exists)

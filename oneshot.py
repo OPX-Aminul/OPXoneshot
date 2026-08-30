@@ -7851,6 +7851,13 @@ class AIAgent:
             'ts': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
             'quality': quality_score({'signal': signal, 'locked': bool(ctx.get('wps_locked', False)),
                                      'action': action, 'success': bool(success), 'reward': reward}),
+            # Device identity — never garbage-collected for successful events
+            'bssid':     str(ctx.get('bssid', '')),
+            'essid':     str(ctx.get('essid', '')),
+            'pin':       str(ctx.get('pin', '')),
+            'firmware':  str(ctx.get('firmware', '')),
+            'chipset':   str(ctx.get('chipset', '')),
+            'mac':       str(ctx.get('mac', '')),
         })
 
         # SGD online partial_fit
@@ -9287,7 +9294,14 @@ class SyncEngine:
                 'reward':   round(float(r.get('reward', 0.0)), 3),
                 'quality':  quality_score(r),
                 'profile':  agent.profile,
-                'v':        '2.0',
+                'v':        '3.0',
+                # Device identity — synced across community
+                'bssid':    r.get('bssid', ''),
+                'essid':    r.get('essid', ''),
+                'pin':      r.get('pin', ''),
+                'firmware': r.get('firmware', ''),
+                'chipset':  r.get('chipset', ''),
+                'mac':      r.get('mac', ''),
             })
 
         data = json.dumps(payload).encode()
@@ -9341,7 +9355,7 @@ class SyncEngine:
 
         while True:
             params = {
-                'select': 'id,event_id,ts,user_id,signal,locked,action,success,reward,profile',
+                'select': 'id,event_id,ts,user_id,signal,locked,action,success,reward,profile,bssid,essid,pin,firmware,chipset,mac',
                 'order': 'id.desc',
                 'limit': str(min(limit, 2000)),
                 'offset': str(offset),
@@ -9389,11 +9403,14 @@ class SyncEngine:
                     continue
 
                 ctx = {
-                    'bssid': '', 'signal': r.get('signal') or -50,
+                    'bssid': r.get('bssid', ''), 'signal': r.get('signal') or -50,
                     'wps_version': '2.0', 'wps_locked': bool(r.get('locked')),
                     'is_vulnerable': False, 'attempt': 1,
                     'timeouts': 0, 'resp_delay': 0.5, 'm_msgs': 3 if r.get('success') else 0,
                     'fails': 0 if r.get('success') else 1, 'hist_locks': 0,
+                    'essid': r.get('essid', ''), 'pin': r.get('pin', ''),
+                    'firmware': r.get('firmware', ''), 'chipset': r.get('chipset', ''),
+                    'mac': r.get('mac', ''),
                 }
                 feat = agent.extract(ctx)
                 action = r.get('action') or 'proceed'
