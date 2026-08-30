@@ -8856,15 +8856,27 @@ def _installGlobally():
             print(f'  [!] {raw_path}: {e}')
             return False
 
-    # Core files
+    # Core tool (single-file build)
     _download('oneshot.py', 'oneshot.py')
-    _download('vulnwsc_new.txt', 'vulnwsc_new.txt')
 
-    # Knowledge files
+    # Data files
+    for f in ('vulnwsc_new.txt',):
+        _download(f, f)
+
+    # Knowledge base files
     for f in ('wifi_master_knowledge.py', 'wps_knowledge_base.py',
               'cve_database.py', 'research_knowledge.py',
               'offensive_reasoning_engine.py'):
         _download(f, f)
+
+    # Training & build scripts
+    for f in ('smart_retrain.py', 'model_build.py', 'mega_train.py',
+              'train_master.py', 'benchmark.py', 'supabase_setup.sql',
+              'requirements.txt'):
+        _download(f, f)
+
+    # Model metadata
+    _download('models/model_metadata.json', 'models/model_metadata.json')
 
     os.chmod(os.path.join(INSTALL_DIR, 'oneshot.py'), 0o755)
 

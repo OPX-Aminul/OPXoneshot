@@ -129,27 +129,54 @@ install_packages() {
 }
 
 # ================================================================
-# 3. Download source files from GitHub (no git clone needed)
+# 3. Download ALL source files from GitHub (no git clone needed)
 # ================================================================
 download_source() {
-    info "Downloading OPXoneshot source from GitHub..."
-    mkdir -p "$INSTALL_DIR/src/wifi" "$INSTALL_DIR/src/wps" "$INSTALL_DIR/models"
+    info "Downloading ALL OPXoneshot source files from GitHub..."
+    mkdir -p "$INSTALL_DIR/models"
 
-    # Main script
-    info "  Downloading oneshot.py..."
-    curl -fsSL "${RAW}/oneshot.py" -o "${INSTALL_DIR}/oneshot.py" && ok "  oneshot.py" || err "  Failed to download oneshot.py"
+    # --- Core tool (single-file build: all src/* embedded inside) ---
+    info "  [core] oneshot.py..."
+    curl -fsSL "${RAW}/oneshot.py" -o "${INSTALL_DIR}/oneshot.py" \
+        && ok "  oneshot.py (self-contained)" || err "  FAILED: oneshot.py"
+    chmod +x "${INSTALL_DIR}/oneshot.py"
 
-    # Vulnerable device list
-    curl -fsSL "${RAW}/vulnwsc_new.txt" -o "${INSTALL_DIR}/vulnwsc_new.txt" 2>/dev/null && ok "  vulnwsc_new.txt" || true
-
-    # Knowledge files
-    for f in wifi_master_knowledge.py wps_knowledge_base.py cve_database.py \
-             research_knowledge.py offensive_reasoning_engine.py; do
-        curl -fsSL "${RAW}/${f}" -o "${INSTALL_DIR}/${f}" 2>/dev/null && ok "  ${f}" || true
+    # --- Data files ---
+    info "  [data] Vulnerable devices list..."
+    for f in vulnwsc_new.txt; do
+        curl -fsSL "${RAW}/${f}" -o "${INSTALL_DIR}/${f}" 2>/dev/null \
+            && ok "  ${f}" || warn "  ${f} (optional)"
     done
 
-    chmod +x "${INSTALL_DIR}/oneshot.py"
-    ok "Source files downloaded to ${INSTALL_DIR}"
+    # --- Knowledge base files ---
+    info "  [knowledge] Knowledge bases..."
+    for f in wifi_master_knowledge.py wps_knowledge_base.py cve_database.py \
+             research_knowledge.py offensive_reasoning_engine.py; do
+        curl -fsSL "${RAW}/${f}" -o "${INSTALL_DIR}/${f}" 2>/dev/null \
+            && ok "  ${f}" || warn "  ${f} (optional)"
+    done
+
+    # --- Training & build scripts ---
+    info "  [scripts] Training & build scripts..."
+    for f in smart_retrain.py model_build.py mega_train.py \
+             train_master.py benchmark.py supabase_setup.sql; do
+        curl -fsSL "${RAW}/${f}" -o "${INSTALL_DIR}/${f}" 2>/dev/null \
+            && ok "  ${f}" || warn "  ${f} (optional)"
+    done
+
+    # --- Requirements ---
+    info "  [config] requirements.txt..."
+    curl -fsSL "${RAW}/requirements.txt" -o "${INSTALL_DIR}/requirements.txt" 2>/dev/null \
+        && ok "  requirements.txt" || warn "  requirements.txt (optional)"
+
+    # --- Model metadata (if exists in repo) ---
+    mkdir -p "${INSTALL_DIR}/models"
+    curl -fsSL "${RAW}/models/model_metadata.json" -o "${INSTALL_DIR}/models/model_metadata.json" 2>/dev/null \
+        && ok "  models/model_metadata.json" || true
+
+    # --- Count downloaded files ---
+    FILE_COUNT=$(find "$INSTALL_DIR" -maxdepth 1 -type f | wc -l)
+    ok "Downloaded ${FILE_COUNT} source files to ${INSTALL_DIR}"
 }
 
 # ================================================================
