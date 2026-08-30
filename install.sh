@@ -18,7 +18,9 @@ ok()    { echo -e "${GREEN}[+]${NC} $1"; }
 warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
 err()   { echo -e "${RED}[x]${NC} $1"; exit 1; }
 
-# ── Must run as root ──────────────────────────────────────────
+# Note: set -e is intentionally NOT used here because some packages
+# may not exist on every distro. We handle errors per-package instead.
+
 if [ "$(id -u)" -ne 0 ]; then
     err "This script must be run as root (use sudo or run as root user)."
 fi
@@ -54,123 +56,125 @@ detect_distro() {
 }
 
 # ── Alpine Linux Setup ────────────────────────────────────────
+# Alpine uses individual apk calls — each package may exist or not,
+# so we never let a single failure kill the whole script.
 setup_alpine() {
     info "Configuring Alpine Linux..."
 
-    # Add community and edge/testing repos for extra packages
+    ALPINE_VER=$(cat /etc/alpine-release 2>/dev/null || echo "3.18")
+    ALPINE_MAJOR=$(echo "$ALPINE_VER" | cut -d. -f1,2)
+
+    # Enable community repo if missing
     if ! grep -q "community" /etc/apk/repositories 2>/dev/null; then
         info "Enabling community repository..."
-        ALPINE_VER=$(cat /etc/alpine-release 2>/dev/null || echo "3.18")
-        ALPINE_MAJOR=$(echo "$ALPINE_VER" | cut -d. -f1,2)
         echo "https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_MAJOR}/community" >> /etc/apk/repositories
     fi
 
+    # Enable edge/testing repo if missing
     if ! grep -q "testing" /etc/apk/repositories 2>/dev/null; then
         info "Enabling edge/testing repository..."
-        ALPINE_VER=$(cat /etc/alpine-release 2>/dev/null || echo "3.18")
-        ALPINE_MAJOR=$(echo "$ALPINE_VER" | cut -d. -f1,2)
         echo "https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_MAJOR}/testing" >> /etc/apk/repositories
     fi
 
     info "Running apk update..."
-    apk update
+    apk update || true
 
-    info "Installing packages for Alpine Linux..."
-    apk add --no-cache \
-        python3 \
-        py3-pip \
-        py3-scikit-learn \
-        py3-numpy \
-        py3-joblib \
-        wireless-tools \
-        iw \
-        wpa_supplicant \
-        libnl3-dev \
-        build-base \
-        python3-dev \
-        git \
-        curl \
-        bash \
-        sudo \
-        procps \
-        aircrack-ng \
-        reaver \
-        pixiewps \
-        bulk_extractor \
-        libpcap-dev
+    # Install base system packages individually — each may not exist
+    info "Installing base system packages for Alpine..."
+    for pkg in python3 py3-pip wireless-tools iw wpa_supplicant \
+               build-base python3-dev libnl3-dev libpcap-dev \
+               git curl bash sudo procps; do
+        info "  Installing ${pkg}..."
+        apk add --no-cache "$pkg" 2>/dev/null && ok "  ${pkg}: OK" || warn "  ${pkg}: not available"
+    done
 
-    # Install bully if not in repos
+    # Install Python packages via pip (always works)
+    info "Installing Python ML packages via pip..."
+    pip3 install --break-system-packages scikit-learn numpy joblib 2>/dev/null \
+        || pip3 install scikit-learn numpy joblib 2>/dev/null \
+        || python3 -m pip install scikit-learn numpy joblib 2>/dev/null \
+        || warn "pip install failed — install scikit-learn numpy joblib manually"
+
+    # Verify Python packages installed
+    if python3 -c "import sklearn; import numpy; import joblib" 2>/dev/null; then
+        ok "Python ML packages: OK"
+    else
+        warn "Python ML packages: FAILED — wifi4 needs scikit-learn numpy joblib"
+    fi
+
+    # Install pentest tools individually — each may not exist on Alpine
+    info "Installing pentest tools (best-effort)..."
+    for pkg in aircrack-ng reaver pixiewps; do
+        info "  Installing ${pkg}..."
+        apk add --no-cache "$pkg" 2>/dev/null && ok "  ${pkg}: OK" || warn "  ${pkg}: not in repos (optional)"
+    done
+
+    # Install bully from source if not available
     if ! command -v bully &>/dev/null; then
-        warn "bully not in Alpine repos, building from source..."
-        apk add --no-cache libpcap-dev libnl3-dev
-        cd /tmp
-        git clone https://github.com/aanarchyy/bully.git
-        cd bully/src
-        make -j"$(nproc)"
-        cp bully /usr/local/bin/
-        cd /
-        rm -rf /tmp/bully
-        ok "bully installed from source"
+        info "Building bully from source..."
+        apk add --no-cache libpcap-dev libnl3-dev 2>/dev/null || true
+        if command -v make &>/dev/null; then
+            cd /tmp && git clone --depth 1 https://github.com/aanarchyy/bully.git 2>/dev/null \
+                && cd bully/src && make -j"$(nproc)" 2>/dev/null \
+                && cp bully /usr/local/bin/ \
+                && ok "bully: built from source" \
+                || warn "bully: build failed (optional)"
+            cd / && rm -rf /tmp/bully
+        else
+            warn "bully: make not available, skipping"
+        fi
     fi
 }
 
 # ── Debian/Kali/Ubuntu/Parrot Setup ──────────────────────────
 setup_debian() {
     info "Updating package lists..."
-    apt-get update -y
+    apt-get update -y || true
 
-    info "Installing packages for Debian-based system..."
-    apt-get install -y \
-        python3 \
-        python3-pip \
-        python3-venv \
-        python3-dev \
-        python3-scikit-learn \
-        python3-numpy \
-        python3-joblib \
-        wireless-tools \
-        iw \
-        wpa_supplicant \
-        libpcap-dev \
-        libnl-3-dev \
-        libnl-genl-3-dev \
-        build-essential \
-        git \
-        curl \
-        sudo \
-        procps \
-        aircrack-ng \
-        reaver \
-        pixiewps \
-        bulk-extractor
+    # Install base packages
+    info "Installing base packages for Debian-based system..."
+    for pkg in python3 python3-pip python3-venv python3-dev \
+               wireless-tools iw wpa_supplicant \
+               libpcap-dev libnl-3-dev libnl-genl-3-dev \
+               build-essential git curl sudo procps; do
+        info "  Installing ${pkg}..."
+        apt-get install -y "$pkg" 2>/dev/null && ok "  ${pkg}: OK" || warn "  ${pkg}: not available"
+    done
+
+    # Install Python ML packages via pip (always works)
+    info "Installing Python ML packages via pip..."
+    pip3 install --break-system-packages scikit-learn numpy joblib 2>/dev/null \
+        || pip3 install scikit-learn numpy joblib 2>/dev/null \
+        || warn "pip install failed"
+
+    # Install pentest tools individually
+    info "Installing pentest tools (best-effort)..."
+    for pkg in aircrack-ng reaver pixiewps bulk-extractor; do
+        info "  Installing ${pkg}..."
+        apt-get install -y "$pkg" 2>/dev/null && ok "  ${pkg}: OK" || warn "  ${pkg}: not in repos (optional)"
+    done
 
     # Install bully if not available
     if ! command -v bully &>/dev/null; then
         if apt-cache show bully &>/dev/null 2>&1; then
-            apt-get install -y bully
+            apt-get install -y bully 2>/dev/null && ok "bully: OK" || true
         else
-            warn "bully not in repos, building from source..."
-            cd /tmp
-            git clone https://github.com/aanarchyy/bully.git
-            cd bully/src
-            make -j"$(nproc)"
-            cp bully /usr/local/bin/
-            cd /
-            rm -rf /tmp/bully
-            ok "bully installed from source"
+            info "Building bully from source..."
+            cd /tmp && git clone --depth 1 https://github.com/aanarchyy/bully.git 2>/dev/null \
+                && cd bully/src && make -j"$(nproc)" 2>/dev/null \
+                && cp bully /usr/local/bin/ \
+                && ok "bully: built from source" \
+                || warn "bully: build failed (optional)"
+            cd / && rm -rf /tmp/bully
         fi
     fi
 
     # Kali-specific tools
     if [ "$DISTRO" = "kali" ] || [ "$DISTRO" = "parrot" ]; then
         info "Installing additional pentest tools for ${DISTRO}..."
-        apt-get install -y \
-            wash \
-            reaver \
-            pixiewps \
-            bully \
-            mdk4 \
-            hostapd-wpe 2>/dev/null || true
+        for pkg in wash mdk4 hostapd-wpe; do
+            apt-get install -y "$pkg" 2>/dev/null && ok "  ${pkg}: OK" || warn "  ${pkg}: not available"
+        done
     fi
 }
 

@@ -8755,47 +8755,150 @@ def _aiAutonomousMode():
     print()
 
 def _installGlobally():
-    """Install wifi4 + oneshot globally to /usr/local/bin."""
+    """Install wifi4 + oneshot globally to /usr/local/bin.
+
+    Detects the Linux distro and installs all required system packages
+    (Python, ML libs, wireless tools) in addition to copying the scripts.
+    Works on Alpine, Debian/Ubuntu/Kali/Parrot, Arch, and Fedora/CentOS.
+    """
     import shutil
+    import subprocess
 
     if os.getuid() != 0:
         print('[!] Run as root: sudo python3 oneshot.py --install')
         return
 
-    install_dir = '/usr/local/bin/oneshot-ai'
     script_dir = os.path.dirname(os.path.abspath(__file__))
+    install_dir = '/usr/local/bin/oneshot-ai'
 
-    print('[*] Installing OneShot AI globally...')
+    # --- 1. Detect distro ---
+    distro = 'unknown'
+    if os.path.exists('/etc/alpine-release'):
+        distro = 'alpine'
+    elif os.path.exists('/etc/os-release'):
+        with open('/etc/os-release') as _f:
+            for line in _f:
+                if line.startswith('ID='):
+                    did = line.split('=', 1)[1].strip().strip('"').lower()
+                    distro = {'kali': 'kali', 'debian': 'debian', 'ubuntu': 'ubuntu',
+                              'parrot': 'parrot', 'fedora': 'fedora', 'centos': 'centos',
+                              'rhel': 'centos', 'arch': 'arch', 'manjaro': 'arch'}.get(did, did)
+                    break
+    elif os.path.exists('/etc/debian_version'):
+        distro = 'debian'
+    elif os.path.exists('/etc/redhat-release'):
+        distro = 'centos'
 
+    print(f'[*] Detected distro: {distro}')
+    print('[*] Installing system dependencies...')
+
+    def _run(cmd):
+        try:
+            subprocess.run(cmd, shell=True, capture_output=True, timeout=300)
+        except Exception:
+            pass
+
+    def _try_install_alpine():
+        pkgs = ['python3', 'py3-pip', 'wireless-tools', 'iw', 'wpa_supplicant',
+                'build-base', 'python3-dev', 'libnl3-dev', 'libpcap-dev',
+                'git', 'curl', 'bash', 'sudo', 'procps']
+        for p in pkgs:
+            print(f'  Installing {p}...')
+            _run(f'apk add --no-cache {p}')
+        print('  Installing Python ML packages via pip...')
+        _run('pip3 install --break-system-packages scikit-learn numpy joblib')
+        for p in ['aircrack-ng', 'reaver', 'pixiewps']:
+            print(f'  Installing {p} (best effort)...')
+            _run(f'apk add --no-cache {p}')
+
+    def _try_install_debian():
+        _run('apt-get update -y')
+        pkgs = ['python3', 'python3-pip', 'python3-venv', 'python3-dev',
+                'wireless-tools', 'iw', 'wpasupplicant',
+                'libpcap-dev', 'libnl-3-dev', 'libnl-genl-3-dev',
+                'build-essential', 'git', 'curl', 'sudo', 'procps']
+        for p in pkgs:
+            print(f'  Installing {p}...')
+            _run(f'apt-get install -y {p}')
+        print('  Installing Python ML packages via pip...')
+        _run('pip3 install --break-system-packages scikit-learn numpy joblib')
+        for p in ['aircrack-ng', 'reaver', 'pixiewps', 'bulk-extractor']:
+            print(f'  Installing {p} (best effort)...')
+            _run(f'apt-get install -y {p}')
+        if distro in ('kali', 'parrot'):
+            for p in ['wash', 'mdk4']:
+                _run(f'apt-get install -y {p}')
+
+    def _try_install_arch():
+        _run('pacman -Syu --noconfirm python python-pip wireless_tools iw wpa_supplicant '
+             'libpcap libnl3 base-devel git curl sudo procps-ng reaver pixiewps aircrack-ng')
+        _run('pip install scikit-learn numpy joblib')
+
+    def _try_install_fedora():
+        pkg_mgr = 'dnf' if shutil.which('dnf') else 'yum'
+        _run(f'{pkg_mgr} install -y python3 python3-pip wireless-tools iw wpa_supplicant '
+             'libpcap-devel libnl3-devel gcc make git curl sudo procps-ng aircrack-ng')
+        _run('pip3 install scikit-learn numpy joblib')
+
+    installers = {
+        'alpine': _try_install_alpine,
+        'debian': _try_install_debian, 'ubuntu': _try_install_debian,
+        'kali': _try_install_debian, 'parrot': _try_install_debian,
+        'arch': _try_install_arch, 'manjaro': _try_install_arch,
+        'fedora': _try_install_fedora, 'centos': _try_install_fedora,
+    }
+    installer = installers.get(distro)
+    if installer:
+        installer()
+    else:
+        print(f'[!] Unknown distro {distro} -- trying Debian fallback')
+        _try_install_debian()
+
+    try:
+        import sklearn, numpy, joblib  # noqa: F401
+        print('[+] Python ML packages: OK')
+    except ImportError as e:
+        print(f'[!] Python ML packages missing: {e}')
+        print('[!] Install manually: pip3 install scikit-learn numpy joblib')
+
+    # --- 2. Copy tool files ---
+    print('[*] Copying tool files...')
     os.makedirs(install_dir, exist_ok=True)
-
-    # Copy oneshot.py
     shutil.copy2(os.path.join(script_dir, 'oneshot.py'), install_dir)
     os.chmod(os.path.join(install_dir, 'oneshot.py'), 0o755)
 
-    # Copy models/ if exists
     models_src = os.path.join(script_dir, 'models')
     if os.path.isdir(models_src):
         shutil.copytree(models_src, os.path.join(install_dir, 'models'), dirs_exist_ok=True)
 
-    # Copy vulnwsc.txt if exists
-    vuln_src = os.path.join(script_dir, 'vulnwsc.txt')
-    if os.path.exists(vuln_src):
-        shutil.copy2(vuln_src, install_dir)
+    for vfile in ('vulnwsc_new.txt', 'vulnwsc.txt'):
+        vuln_src = os.path.join(script_dir, vfile)
+        if os.path.exists(vuln_src):
+            shutil.copy2(vuln_src, install_dir)
 
-    # Create wifi4 command
+    src_dir = os.path.join(script_dir, 'src')
+    if os.path.isdir(src_dir):
+        shutil.copytree(src_dir, os.path.join(install_dir, 'src'), dirs_exist_ok=True)
+
+    for kfile in ('wifi_master_knowledge.py', 'wps_knowledge_base.py',
+                  'cve_database.py', 'research_knowledge.py',
+                  'offensive_reasoning_engine.py'):
+        ksrc = os.path.join(script_dir, kfile)
+        if os.path.exists(ksrc):
+            shutil.copy2(ksrc, install_dir)
+
+    # --- 3. Create global commands ---
     wifi4_path = '/usr/local/bin/wifi4'
     with open(wifi4_path, 'w') as f:
         f.write('#!/bin/bash\n')
-        f.write('# wifi4 — OneShot AI autonomous WiFi tool\n')
+        f.write('# wifi4 -- OneShot AI autonomous WiFi tool\n')
         f.write('exec python3 /usr/local/bin/oneshot-ai/oneshot.py --ai "$@"\n')
     os.chmod(wifi4_path, 0o755)
 
-    # Create oneshot command
     oneshot_path = '/usr/local/bin/oneshot'
     with open(oneshot_path, 'w') as f:
         f.write('#!/bin/bash\n')
-        f.write('# oneshot — OneShot AI WiFi tool\n')
+        f.write('# oneshot -- OneShot AI WiFi tool\n')
         f.write('exec python3 /usr/local/bin/oneshot-ai/oneshot.py "$@"\n')
     os.chmod(oneshot_path, 0o755)
 
@@ -8804,6 +8907,8 @@ def _installGlobally():
     print('[+] Usage: oneshot --ai')
     print('[+] Usage: oneshot --check BSSID')
     print(f'[+] Location: {install_dir}/')
+
+
 
 def syncModelToRepo(agent=None):
     """Copy the current trained model from ~/.OneShot-Extended/ into the repo
