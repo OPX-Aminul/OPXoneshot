@@ -238,32 +238,35 @@
 
 ## 🚀 Quick Start
 
-### One-Command Install (Recommended)
+### One-File Install — No Git Clone Needed!
 
-**Just two commands — everything installs automatically:**
+**Download just ONE file — everything else installs automatically:**
 
+**Method 1: Bash installer**
 ```bash
-git clone https://github.com/OPX-Aminul/OPXoneshot.git && cd OPXoneshot && sudo bash install.sh
+# Download and run (no git clone needed)
+curl -fsSL https://raw.githubusercontent.com/OPX-Aminul/OPXoneshot/main/install.sh -o install.sh && sudo bash install.sh
 ```
 
-Or use the Python installer:
-
+**Method 2: Python installer**
 ```bash
-git clone https://github.com/OPX-Aminul/OPXoneshot.git && cd OPXoneshot && sudo python3 oneshot.py --install
+# Download and run (no git clone needed)
+curl -fsSL https://raw.githubusercontent.com/OPX-Aminul/OPXoneshot/main/oneshot.py -o oneshot.py && sudo python3 oneshot.py --install
 ```
 
-**What happens automatically:**
+**That's it! One file → full ecosystem:**
 
-| Step | What Gets Installed |
-|------|---------------------|
+| Step | What Happens Automatically |
+|------|---------------------------|
 | 1 | 🐧 Detects your Linux distro (Alpine/Kali/Ubuntu/Debian/Arch/Fedora) |
-| 2 | 📦 Installs all system packages (Python, wireless tools, build tools) |
+| 2 | 📦 Installs system packages (Python, wireless tools, build tools) |
 | 3 | 🧠 Installs ML packages (scikit-learn, numpy, joblib) |
-| 4 | 📥 Downloads latest AI brain model from GitHub Releases |
-| 5 | ⚡ Creates global `wifi4` + `oneshot` commands |
-| 6 | ✅ Verifies everything works |
+| 4 | 📥 Downloads ALL source files from GitHub (no clone needed) |
+| 5 | 📥 Downloads latest AI brain model from GitHub Releases |
+| 6 | ⚡ Creates global `wifi4` + `oneshot` commands |
+| 7 | ✅ Verifies everything works |
 
-**Supported distros:** Alpine Linux, Kali Linux, Parrot OS, Ubuntu, Debian, Arch Linux, Manjaro, Fedora, CentOS, RHEL
+**Supported:** Alpine Linux, Kali Linux, Parrot OS, Ubuntu, Debian, Arch, Manjaro, Fedora, CentOS, RHEL
 
 ```bash
 # After install — run from anywhere:

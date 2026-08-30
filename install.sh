@@ -1,36 +1,49 @@
 #!/bin/bash
 # ================================================================
-# OPXoneshot (wifi4) — Universal Linux Installer
-# Detects distro and installs all dependencies automatically
-# Supports: Alpine, Kali, Debian, Ubuntu, Parrot, Arch, Fedora
+#  OPXoneshot (wifi4) — One-File Universal Installer
+#
+#  Usage:  curl -fsSL <url>/install.sh -o install.sh && sudo bash install.sh
+#
+#  This script is SELF-CONTAINED. It downloads everything from GitHub:
+#    - oneshot.py + source files (raw GitHub)
+#    - AI brain model (GitHub Releases)
+#    - System packages (apt/apk/pacman/dnf)
+#    - Python ML packages (pip)
+#
+#  No git clone needed. No repo needed. Just this one file.
+#  Supports: Alpine, Kali, Debian, Ubuntu, Parrot, Arch, Fedora/CentOS
 # ================================================================
-
-# Note: set -e is NOT used because some packages may not exist on
-# every distro. We handle errors per-package instead.
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 info()  { echo -e "${CYAN}[*]${NC} $1"; }
 ok()    { echo -e "${GREEN}[+]${NC} $1"; }
 warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
 err()   { echo -e "${RED}[x]${NC} $1"; exit 1; }
 
-# Note: set -e is intentionally NOT used here because some packages
-# may not exist on every distro. We handle errors per-package instead.
-
+# --- Root check ---
 if [ "$(id -u)" -ne 0 ]; then
-    err "This script must be run as root (use sudo or run as root user)."
+    err "Run as root: sudo bash install.sh"
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# --- GitHub source ---
+REPO="OPX-Aminul/OPXoneshot"
+RAW="https://raw.githubusercontent.com/${REPO}/main"
+RELEASES="https://api.github.com/repos/${REPO}/releases"
+
+# --- Install directory ---
+INSTALL_DIR="/opt/oneshot-ai"
 WIFI4_BIN="/usr/local/bin/wifi4"
 
-# ── Distro Detection ─────────────────────────────────────────
+# ================================================================
+# 1. Detect distro
+# ================================================================
 detect_distro() {
+    DISTRO="unknown"
     if [ -f /etc/alpine-release ]; then
         DISTRO="alpine"
     elif [ -f /etc/os-release ]; then
@@ -41,431 +54,206 @@ detect_distro() {
             ubuntu)     DISTRO="ubuntu" ;;
             parrot)     DISTRO="parrot" ;;
             fedora)     DISTRO="fedora" ;;
-            centos)     DISTRO="centos" ;;
-            rhel)       DISTRO="centos" ;;
+            centos|rhel) DISTRO="centos" ;;
             arch|manjaro) DISTRO="arch" ;;
-            *)          DISTRO="unknown" ;;
         esac
     elif [ -f /etc/debian_version ]; then
         DISTRO="debian"
-    elif [ -f /etc/redhat-release ]; then
-        DISTRO="centos"
-    else
-        DISTRO="unknown"
     fi
-    ok "Detected distro: ${DISTRO}"
+    ok "Detected: ${DISTRO}"
 }
 
-# ── Alpine Linux Setup ────────────────────────────────────────
-# Alpine uses individual apk calls — each package may exist or not,
-# so we never let a single failure kill the whole script.
-setup_alpine() {
-    info "Configuring Alpine Linux..."
+# ================================================================
+# 2. Install system packages
+# ================================================================
+install_packages() {
+    info "Installing system packages..."
 
-    ALPINE_VER=$(cat /etc/alpine-release 2>/dev/null || echo "3.18")
-    ALPINE_MAJOR=$(echo "$ALPINE_VER" | cut -d. -f1,2)
+    _install_alpine() {
+        ALPINE_VER=$(cat /etc/alpine-release 2>/dev/null || echo "3.18")
+        ALPINE_MAJOR=$(echo "$ALPINE_VER" | cut -d. -f1,2)
+        if ! grep -q "community" /etc/apk/repositories 2>/dev/null; then
+            echo "https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_MAJOR}/community" >> /etc/apk/repositories
+        fi
+        apk update || true
+        for pkg in python3 py3-pip wireless-tools iw wpa_supplicant \
+                   build-base python3-dev libnl3-dev libpcap-dev \
+                   git curl bash sudo procps; do
+            apk add --no-cache "$pkg" 2>/dev/null && ok "  $pkg" || warn "  $pkg (not available)"
+        done
+    }
 
-    # Enable community repo if missing
-    if ! grep -q "community" /etc/apk/repositories 2>/dev/null; then
-        info "Enabling community repository..."
-        echo "https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_MAJOR}/community" >> /etc/apk/repositories
-    fi
+    _install_debian() {
+        apt-get update -y || true
+        for pkg in python3 python3-pip python3-venv python3-dev \
+                   wireless-tools iw wpasupplicant \
+                   libpcap-dev libnl-3-dev libnl-genl-3-dev \
+                   build-essential git curl sudo procps; do
+            apt-get install -y "$pkg" 2>/dev/null && ok "  $pkg" || warn "  $pkg (not available)"
+        done
+        # Kali/Parrot extras
+        if [ "$DISTRO" = "kali" ] || [ "$DISTRO" = "parrot" ]; then
+            for pkg in wash mdk4 reaver pixiewps aircrack-ng; do
+                apt-get install -y "$pkg" 2>/dev/null && ok "  $pkg" || true
+            done
+        fi
+    }
 
-    # Enable edge/testing repo if missing
-    if ! grep -q "testing" /etc/apk/repositories 2>/dev/null; then
-        info "Enabling edge/testing repository..."
-        echo "https://dl-cdn.alpinelinux.org/alpine/v${ALPINE_MAJOR}/testing" >> /etc/apk/repositories
-    fi
+    _install_arch() {
+        pacman -Syu --noconfirm python python-pip wireless_tools iw wpa_supplicant \
+            libpcap libnl3 base-devel git curl sudo procps-ng 2>/dev/null \
+            && ok "  base packages" || warn "  some packages failed"
+    }
 
-    info "Running apk update..."
-    apk update || true
+    _install_fedora() {
+        MGR="dnf"; command -v dnf &>/dev/null || MGR="yum"
+        $MGR install -y python3 python3-pip wireless-tools iw wpa_supplicant \
+            libpcap-devel libnl3-devel gcc make git curl sudo procps-ng 2>/dev/null \
+            && ok "  base packages" || warn "  some packages failed"
+    }
 
-    # Install base system packages individually — each may not exist
-    info "Installing base system packages for Alpine..."
-    for pkg in python3 py3-pip wireless-tools iw wpa_supplicant \
-               build-base python3-dev libnl3-dev libpcap-dev \
-               git curl bash sudo procps; do
-        info "  Installing ${pkg}..."
-        apk add --no-cache "$pkg" 2>/dev/null && ok "  ${pkg}: OK" || warn "  ${pkg}: not available"
-    done
+    case "$DISTRO" in
+        alpine)              _install_alpine ;;
+        debian|ubuntu|kali|parrot) _install_debian ;;
+        arch|manjaro)        _install_arch ;;
+        fedora|centos)       _install_fedora ;;
+        *)                   warn "Unknown distro, trying Debian..." ; _install_debian ;;
+    esac
 
-    # Install Python packages via pip (always works)
+    # Python ML packages via pip
     info "Installing Python ML packages via pip..."
     pip3 install --break-system-packages scikit-learn numpy joblib 2>/dev/null \
         || pip3 install scikit-learn numpy joblib 2>/dev/null \
         || python3 -m pip install scikit-learn numpy joblib 2>/dev/null \
-        || warn "pip install failed — install scikit-learn numpy joblib manually"
+        || warn "pip install failed — install manually: pip3 install scikit-learn numpy joblib"
+}
 
-    # Verify Python packages installed
-    if python3 -c "import sklearn; import numpy; import joblib" 2>/dev/null; then
-        ok "Python ML packages: OK"
-    else
-        warn "Python ML packages: FAILED — wifi4 needs scikit-learn numpy joblib"
-    fi
+# ================================================================
+# 3. Download source files from GitHub (no git clone needed)
+# ================================================================
+download_source() {
+    info "Downloading OPXoneshot source from GitHub..."
+    mkdir -p "$INSTALL_DIR/src/wifi" "$INSTALL_DIR/src/wps" "$INSTALL_DIR/models"
 
-    # Install pentest tools individually — each may not exist on Alpine
-    info "Installing pentest tools (best-effort)..."
-    for pkg in aircrack-ng reaver pixiewps; do
-        info "  Installing ${pkg}..."
-        apk add --no-cache "$pkg" 2>/dev/null && ok "  ${pkg}: OK" || warn "  ${pkg}: not in repos (optional)"
+    # Main script
+    info "  Downloading oneshot.py..."
+    curl -fsSL "${RAW}/oneshot.py" -o "${INSTALL_DIR}/oneshot.py" && ok "  oneshot.py" || err "  Failed to download oneshot.py"
+
+    # Vulnerable device list
+    curl -fsSL "${RAW}/vulnwsc_new.txt" -o "${INSTALL_DIR}/vulnwsc_new.txt" 2>/dev/null && ok "  vulnwsc_new.txt" || true
+
+    # Knowledge files
+    for f in wifi_master_knowledge.py wps_knowledge_base.py cve_database.py \
+             research_knowledge.py offensive_reasoning_engine.py; do
+        curl -fsSL "${RAW}/${f}" -o "${INSTALL_DIR}/${f}" 2>/dev/null && ok "  ${f}" || true
     done
 
-    # Install bully from source if not available
-    if ! command -v bully &>/dev/null; then
-        info "Building bully from source..."
-        apk add --no-cache libpcap-dev libnl3-dev 2>/dev/null || true
-        if command -v make &>/dev/null; then
-            cd /tmp && git clone --depth 1 https://github.com/aanarchyy/bully.git 2>/dev/null \
-                && cd bully/src && make -j"$(nproc)" 2>/dev/null \
-                && cp bully /usr/local/bin/ \
-                && ok "bully: built from source" \
-                || warn "bully: build failed (optional)"
-            cd / && rm -rf /tmp/bully
-        else
-            warn "bully: make not available, skipping"
-        fi
-    fi
+    chmod +x "${INSTALL_DIR}/oneshot.py"
+    ok "Source files downloaded to ${INSTALL_DIR}"
 }
 
-# ── Debian/Kali/Ubuntu/Parrot Setup ──────────────────────────
-setup_debian() {
-    info "Updating package lists..."
-    apt-get update -y || true
-
-    # Install base packages
-    info "Installing base packages for Debian-based system..."
-    for pkg in python3 python3-pip python3-venv python3-dev \
-               wireless-tools iw wpa_supplicant \
-               libpcap-dev libnl-3-dev libnl-genl-3-dev \
-               build-essential git curl sudo procps; do
-        info "  Installing ${pkg}..."
-        apt-get install -y "$pkg" 2>/dev/null && ok "  ${pkg}: OK" || warn "  ${pkg}: not available"
-    done
-
-    # Install Python ML packages via pip (always works)
-    info "Installing Python ML packages via pip..."
-    pip3 install --break-system-packages scikit-learn numpy joblib 2>/dev/null \
-        || pip3 install scikit-learn numpy joblib 2>/dev/null \
-        || warn "pip install failed"
-
-    # Install pentest tools individually
-    info "Installing pentest tools (best-effort)..."
-    for pkg in aircrack-ng reaver pixiewps bulk-extractor; do
-        info "  Installing ${pkg}..."
-        apt-get install -y "$pkg" 2>/dev/null && ok "  ${pkg}: OK" || warn "  ${pkg}: not in repos (optional)"
-    done
-
-    # Install bully if not available
-    if ! command -v bully &>/dev/null; then
-        if apt-cache show bully &>/dev/null 2>&1; then
-            apt-get install -y bully 2>/dev/null && ok "bully: OK" || true
-        else
-            info "Building bully from source..."
-            cd /tmp && git clone --depth 1 https://github.com/aanarchyy/bully.git 2>/dev/null \
-                && cd bully/src && make -j"$(nproc)" 2>/dev/null \
-                && cp bully /usr/local/bin/ \
-                && ok "bully: built from source" \
-                || warn "bully: build failed (optional)"
-            cd / && rm -rf /tmp/bully
-        fi
-    fi
-
-    # Kali-specific tools
-    if [ "$DISTRO" = "kali" ] || [ "$DISTRO" = "parrot" ]; then
-        info "Installing additional pentest tools for ${DISTRO}..."
-        for pkg in wash mdk4 hostapd-wpe; do
-            apt-get install -y "$pkg" 2>/dev/null && ok "  ${pkg}: OK" || warn "  ${pkg}: not available"
-        done
-    fi
-}
-
-# ── Arch/Manjaro Setup ───────────────────────────────────────
-setup_arch() {
-    info "Installing packages for Arch Linux..."
-    pacman -Syu --noconfirm \
-        python \
-        python-pip \
-        python-scikit-learn \
-        python-numpy \
-        python-joblib \
-        wireless_tools \
-        iw \
-        wpa_supplicant \
-        libpcap \
-        libnl3 \
-        base-devel \
-        git \
-        curl \
-        sudo \
-        procps-ng \
-        reaver \
-        pixiewps \
-        aircrack-ng
-
-    # Install bully from AUR or build
-    if ! command -v bully &>/dev/null; then
-        warn "bully not found, building from source..."
-        cd /tmp
-        git clone https://github.com/aanarchyy/bully.git
-        cd bully/src
-        make -j"$(nproc)"
-        cp bully /usr/local/bin/
-        cd /
-        rm -rf /tmp/bully
-        ok "bully installed from source"
-    fi
-}
-
-# ── Fedora/CentOS Setup ─────────────────────────────────────
-setup_fedora() {
-    info "Installing packages for Fedora/CentOS..."
-    if command -v dnf &>/dev/null; then
-        dnf install -y \
-            python3 \
-            python3-pip \
-            python3-scikit-learn \
-            python3-numpy \
-            python3-joblib \
-            wireless-tools \
-            iw \
-            wpa_supplicant \
-            libpcap-devel \
-            libnl3-devel \
-            gcc \
-            make \
-            git \
-            curl \
-            sudo \
-            procps-ng \
-            aircrack-ng
-    else
-        yum install -y \
-            python3 \
-            python3-pip \
-            wireless-tools \
-            iw \
-            wpa_supplicant \
-            libpcap-devel \
-            libnl3-devel \
-            gcc \
-            make \
-            git \
-            curl \
-            sudo \
-            procps
-    fi
-
-    # Build reaver + pixiewps + bully from source on RHEL-family
-    cd /tmp
-    if ! command -v reaver &>/dev/null; then
-        info "Building reaver from source..."
-        git clone https://github.com/t6x/reaver-wps-fork-t6x.git
-        cd reaver-wps-fork-t6x/src
-        ./configure
-        make -j"$(nproc)"
-        make install
-        cd /tmp
-    fi
-
-    if ! command -v pixiewps &>/dev/null; then
-        info "Building pixiewps from source..."
-        git clone https://github.com/wiire-a/pixiewps.git
-        cd pixiewps
-        make -j"$(nproc)"
-        make install
-        cd /tmp
-    fi
-
-    if ! command -v bully &>/dev/null; then
-        info "Building bully from source..."
-        git clone https://github.com/aanarchyy/bully.git
-        cd bully/src
-        make -j"$(nproc)"
-        cp bully /usr/local/bin/
-        cd /tmp
-    fi
-
-    rm -rf /tmp/reaver-wps-fork-t6x /tmp/pixiewps /tmp/bully
-}
-
-# ── Unknown Distro Warning ───────────────────────────────────
-setup_unknown() {
-    warn "Unsupported distro detected. Attempting Debian-style install..."
-    warn "If this fails, please install the following manually:"
-    warn "  python3, pip3, iw, reaver, pixiewps, bully, aircrack-ng, git, curl"
-    warn ""
-
-    # Try apt-based install as fallback
-    if command -v apt-get &>/dev/null; then
-        setup_debian
-    elif command -v dnf &>/dev/null; then
-        setup_fedora
-    elif command -v pacman &>/dev/null; then
-        setup_arch
-    elif command -v apk &>/dev/null; then
-        setup_alpine
-    else
-        err "No supported package manager found. Install dependencies manually."
-    fi
-}
-
-# ── Install Python dependencies ──────────────────────────────
-install_python_deps() {
-    info "Installing Python dependencies..."
-    if command -v pip3 &>/dev/null; then
-        pip3 install --break-system-packages scikit-learn numpy joblib 2>/dev/null || \
-        pip3 install scikit-learn numpy joblib
-    elif command -v pip &>/dev/null; then
-        pip install scikit-learn numpy joblib
-    fi
-}
-
-# ── Download AI models from GitHub Releases ────────────────
+# ================================================================
+# 4. Download AI brain model from GitHub Releases
+# ================================================================
 download_models() {
     info "Downloading latest AI brain model from GitHub Releases..."
-
-    REPO="OPX-Aminul/OPXoneshot"
-    MODELS_DIR="${SCRIPT_DIR}/models"
+    MODELS_DIR="${INSTALL_DIR}/models"
     mkdir -p "$MODELS_DIR"
 
-    # Get latest release tag from GitHub API
-    LATEST_TAG=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4)
+    # Get latest release
+    LATEST_URL="${RELEASES}/latest"
+    TAG=$(curl -fsSL "$LATEST_URL" 2>/dev/null | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4)
 
-    if [ -z "$LATEST_TAG" ]; then
-        # Fallback: try 'model-latest' tag
-        LATEST_TAG="model-latest"
+    if [ -z "$TAG" ]; then
+        TAG="model-latest"
     fi
+    info "  Release: ${TAG}"
 
-    info "Latest release tag: ${LATEST_TAG}"
-
-    # Download each model asset from the release
-    RELEASE_URL="https://api.github.com/repos/${REPO}/releases/tags/${LATEST_TAG}"
-    ASSETS=$(curl -fsSL "$RELEASE_URL" 2>/dev/null | grep -o '"browser_download_url": *"[^"]*"' | cut -d'"' -f4)
+    # Get release assets
+    ASSETS=$(curl -fsSL "${RELEASES}/tags/${TAG}" 2>/dev/null | grep -o '"browser_download_url": *"[^"]*"' | cut -d'"' -f4)
 
     if [ -z "$ASSETS" ]; then
-        warn "No release assets found for ${LATEST_TAG}"
-        warn "Models will be created on first run (local training)"
+        warn "  No release assets found — models will train on first run"
         return 0
     fi
 
     DOWNLOADED=0
     while IFS= read -r URL; do
+        [ -z "$URL" ] && continue
         FILENAME=$(basename "$URL")
-        DEST="${MODELS_DIR}/${FILENAME}"
         info "  Downloading ${FILENAME}..."
-        if curl -fsSL -o "$DEST" "$URL" 2>/dev/null; then
+        if curl -fsSL -o "${MODELS_DIR}/${FILENAME}" "$URL" 2>/dev/null; then
             DOWNLOADED=$((DOWNLOADED + 1))
         else
-            warn "  Failed to download ${FILENAME}"
+            warn "  Failed: ${FILENAME}"
         fi
     done <<< "$ASSETS"
 
-    if [ "$DOWNLOADED" -gt 0 ]; then
-        ok "Downloaded ${DOWNLOADED} model files to ${MODELS_DIR}"
-    else
-        warn "No model files downloaded — will train locally on first run"
-    fi
+    ok "Downloaded ${DOWNLOADED} model files"
 }
 
-# ── Install wifi4 command ────────────────────────────────────
-install_wifi4() {
-    info "Installing wifi4 command..."
+# ================================================================
+# 5. Create global wifi4 + oneshot commands
+# ================================================================
+create_commands() {
+    info "Creating global commands..."
 
-    # Create the wrapper script
-    cat > "$WIFI4_BIN" << WIFIEOF
+    cat > "$WIFI4_BIN" << CMDEOF
 #!/bin/bash
-# OPXoneshot (wifi4) launcher
-# Installed by install.sh
-exec python3 "${SCRIPT_DIR}/oneshot.py" "\$@"
-WIFIEOF
-
+exec python3 ${INSTALL_DIR}/oneshot.py --ai "\$@"
+CMDEOF
     chmod +x "$WIFI4_BIN"
-    chmod +x "$SCRIPT_DIR/oneshot.py" 2>/dev/null || true
-    ok "wifi4 command installed to ${WIFI4_BIN}"
+    ok "wifi4 -> ${WIFI4_BIN}"
+
+    ONESHOT_BIN="/usr/local/bin/oneshot"
+    cat > "$ONESHOT_BIN" << CMDEOF
+#!/bin/bash
+exec python3 ${INSTALL_DIR}/oneshot.py "\$@"
+CMDEOF
+    chmod +x "$ONESHOT_BIN"
+    ok "oneshot -> ${ONESHOT_BIN}"
 }
 
-# ── Verify Installation ──────────────────────────────────────
+# ================================================================
+# 6. Verify installation
+# ================================================================
 verify_install() {
     info "Verifying installation..."
-
-    local PASS=0
-    local FAIL=0
-
-    # Check required commands
-    for cmd in python3 iw curl git; do
-        if command -v "$cmd" &>/dev/null; then
-            ok "  $cmd: $(command -v "$cmd")"
-            PASS=$((PASS + 1))
-        else
-            warn "  $cmd: NOT FOUND"
-            FAIL=$((FAIL + 1))
-        fi
+    PASS=0; FAIL=0
+    for cmd in python3 iw curl; do
+        command -v "$cmd" &>/dev/null && ok "  $cmd" && PASS=$((PASS+1)) || { warn "  $cmd NOT FOUND"; FAIL=$((FAIL+1)); }
     done
-
-    # Check Python packages
-    if python3 -c "import sklearn; import numpy; import joblib" 2>/dev/null; then
-        ok "  Python packages (sklearn, numpy, joblib): OK"
-        PASS=$((PASS + 1))
-    else
-        warn "  Python packages: Some missing"
-        FAIL=$((FAIL + 1))
-    fi
-
-    # Check pentest tools
-    for tool in reaver pixiewps; do
-        if command -v "$tool" &>/dev/null; then
-            ok "  $tool: $(command -v "$tool")"
-            PASS=$((PASS + 1))
-        else
-            warn "  $tool: NOT FOUND (may still work without it)"
-        fi
-    done
-
-    # Check wifi4
-    if command -v wifi4 &>/dev/null; then
-        ok "  wifi4: $(command -v wifi4)"
-        PASS=$((PASS + 1))
-    else
-        warn "  wifi4: NOT FOUND in PATH"
-        FAIL=$((FAIL + 1))
-    fi
-
+    python3 -c "import sklearn,numpy,joblib" 2>/dev/null && ok "  Python ML packages" && PASS=$((PASS+1)) || { warn "  Python ML packages missing"; FAIL=$((FAIL+1)); }
+    [ -f "${INSTALL_DIR}/oneshot.py" ] && ok "  oneshot.py" && PASS=$((PASS+1)) || { warn "  oneshot.py missing"; FAIL=$((FAIL+1)); }
+    [ -f "${INSTALL_DIR}/models/ai_agent.joblib" ] && ok "  AI brain model" && PASS=$((PASS+1)) || warn "  AI model (will train on first run)"
+    command -v wifi4 &>/dev/null && ok "  wifi4 command" && PASS=$((PASS+1)) || { warn "  wifi4 NOT FOUND"; FAIL=$((FAIL+1)); }
     echo ""
     ok "Verification: ${PASS} passed, ${FAIL} warnings"
 }
 
-# ── Main ─────────────────────────────────────────────────────
-main() {
-    echo ""
-    echo -e "${CYAN}╔══════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║     OPXoneshot (wifi4) — Universal Installer    ║${NC}"
-    echo -e "${CYAN}║     AI-Powered WPS Vulnerability Platform       ║${NC}"
-    echo -e "${CYAN}╚══════════════════════════════════════════════════╝${NC}"
-    echo ""
+# ================================================================
+# MAIN
+# ================================================================
+echo ""
+echo -e "${CYAN}╔══════════════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}║  OPXoneshot (wifi4) — One-File Universal Installer  ║${NC}"
+echo -e "${CYAN}║  No git clone needed. Just this script.             ║${NC}"
+echo -e "${CYAN}╚══════════════════════════════════════════════════════╝${NC}"
+echo ""
 
-    detect_distro
+detect_distro
+install_packages
+download_source
+download_models
+create_commands
+verify_install
 
-    case "$DISTRO" in
-        alpine)  setup_alpine ;;
-        kali|debian|ubuntu|parrot) setup_debian ;;
-        arch)    setup_arch ;;
-        fedora|centos) setup_fedora ;;
-        *)       setup_unknown ;;
-    esac
-
-    install_python_deps
-    download_models
-    install_wifi4
-    verify_install
-
-    echo ""
-    ok "═══════════════════════════════════════════════════"
-    ok "Installation complete!"
-    ok ""
-    ok "Run from anywhere: wifi4"
-    ok "Or directly:       python3 ${SCRIPT_DIR}/oneshot.py --ai"
-    ok "═══════════════════════════════════════════════════"
-    echo ""
-}
-
-main "$@"
+echo ""
+ok "═══════════════════════════════════════════════════"
+ok "Installation complete!"
+ok ""
+ok "Run from anywhere:  wifi4"
+ok "Or:                 oneshot --ai"
+ok "Location:           ${INSTALL_DIR}/"
+ok "═══════════════════════════════════════════════════"
+echo ""

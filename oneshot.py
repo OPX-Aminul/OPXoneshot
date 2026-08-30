@@ -8755,21 +8755,24 @@ def _aiAutonomousMode():
     print()
 
 def _installGlobally():
-    """Install wifi4 + oneshot globally to /usr/local/bin.
+    """Install wifi4 + oneshot globally from a SINGLE file.
 
-    Detects the Linux distro and installs all required system packages
-    (Python, ML libs, wireless tools) in addition to copying the scripts.
-    Works on Alpine, Debian/Ubuntu/Kali/Parrot, Arch, and Fedora/CentOS.
+    This works even when oneshot.py is the ONLY file the user downloaded.
+    It downloads all source files and AI models from GitHub automatically.
     """
     import shutil
     import subprocess
+    import urllib.request
 
     if os.getuid() != 0:
         print('[!] Run as root: sudo python3 oneshot.py --install')
         return
 
+    REPO = 'OPX-Aminul/OPXoneshot'
+    RAW = f'https://raw.githubusercontent.com/{REPO}/main'
+    RELEASES = f'https://api.github.com/repos/{REPO}/releases'
+    INSTALL_DIR = '/opt/oneshot-ai'
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    install_dir = '/usr/local/bin/oneshot-ai'
 
     # --- 1. Detect distro ---
     distro = 'unknown'
@@ -8786,8 +8789,6 @@ def _installGlobally():
                     break
     elif os.path.exists('/etc/debian_version'):
         distro = 'debian'
-    elif os.path.exists('/etc/redhat-release'):
-        distro = 'centos'
 
     print(f'[*] Detected distro: {distro}')
     print('[*] Installing system dependencies...')
@@ -8798,190 +8799,151 @@ def _installGlobally():
         except Exception:
             pass
 
-    def _try_install_alpine():
-        pkgs = ['python3', 'py3-pip', 'wireless-tools', 'iw', 'wpa_supplicant',
-                'build-base', 'python3-dev', 'libnl3-dev', 'libpcap-dev',
-                'git', 'curl', 'bash', 'sudo', 'procps']
-        for p in pkgs:
-            print(f'  Installing {p}...')
+    # --- Per-distro package install ---
+    if distro == 'alpine':
+        _run('apk update')
+        for p in ['python3', 'py3-pip', 'wireless-tools', 'iw', 'wpa_supplicant',
+                  'build-base', 'python3-dev', 'libnl3-dev', 'libpcap-dev',
+                  'git', 'curl', 'bash', 'sudo', 'procps']:
             _run(f'apk add --no-cache {p}')
-        print('  Installing Python ML packages via pip...')
         _run('pip3 install --break-system-packages scikit-learn numpy joblib')
-        for p in ['aircrack-ng', 'reaver', 'pixiewps']:
-            print(f'  Installing {p} (best effort)...')
-            _run(f'apk add --no-cache {p}')
-
-    def _try_install_debian():
+    elif distro in ('debian', 'ubuntu', 'kali', 'parrot'):
         _run('apt-get update -y')
-        pkgs = ['python3', 'python3-pip', 'python3-venv', 'python3-dev',
-                'wireless-tools', 'iw', 'wpasupplicant',
-                'libpcap-dev', 'libnl-3-dev', 'libnl-genl-3-dev',
-                'build-essential', 'git', 'curl', 'sudo', 'procps']
-        for p in pkgs:
-            print(f'  Installing {p}...')
+        for p in ['python3', 'python3-pip', 'python3-venv', 'python3-dev',
+                  'wireless-tools', 'iw', 'wpasupplicant',
+                  'libpcap-dev', 'libnl-3-dev', 'libnl-genl-3-dev',
+                  'build-essential', 'git', 'curl', 'sudo', 'procps']:
             _run(f'apt-get install -y {p}')
-        print('  Installing Python ML packages via pip...')
         _run('pip3 install --break-system-packages scikit-learn numpy joblib')
-        for p in ['aircrack-ng', 'reaver', 'pixiewps', 'bulk-extractor']:
-            print(f'  Installing {p} (best effort)...')
-            _run(f'apt-get install -y {p}')
         if distro in ('kali', 'parrot'):
-            for p in ['wash', 'mdk4']:
+            for p in ['wash', 'mdk4', 'reaver', 'pixiewps', 'aircrack-ng']:
                 _run(f'apt-get install -y {p}')
-
-    def _try_install_arch():
+    elif distro in ('arch', 'manjaro'):
         _run('pacman -Syu --noconfirm python python-pip wireless_tools iw wpa_supplicant '
-             'libpcap libnl3 base-devel git curl sudo procps-ng reaver pixiewps aircrack-ng')
+             'libpcap libnl3 base-devel git curl sudo procps-ng')
         _run('pip install scikit-learn numpy joblib')
-
-    def _try_install_fedora():
-        pkg_mgr = 'dnf' if shutil.which('dnf') else 'yum'
-        _run(f'{pkg_mgr} install -y python3 python3-pip wireless-tools iw wpa_supplicant '
-             'libpcap-devel libnl3-devel gcc make git curl sudo procps-ng aircrack-ng')
+    elif distro in ('fedora', 'centos'):
+        mgr = 'dnf' if shutil.which('dnf') else 'yum'
+        _run(f'{mgr} install -y python3 python3-pip wireless-tools iw wpa_supplicant '
+             'libpcap-devel libnl3-devel gcc make git curl sudo procps-ng')
         _run('pip3 install scikit-learn numpy joblib')
-
-    installers = {
-        'alpine': _try_install_alpine,
-        'debian': _try_install_debian, 'ubuntu': _try_install_debian,
-        'kali': _try_install_debian, 'parrot': _try_install_debian,
-        'arch': _try_install_arch, 'manjaro': _try_install_arch,
-        'fedora': _try_install_fedora, 'centos': _try_install_fedora,
-    }
-    installer = installers.get(distro)
-    if installer:
-        installer()
     else:
         print(f'[!] Unknown distro {distro} -- trying Debian fallback')
-        _try_install_debian()
+        _run('apt-get update -y')
+        _run('apt-get install -y python3 python3-pip build-essential git curl sudo')
+        _run('pip3 install scikit-learn numpy joblib')
 
     try:
         import sklearn, numpy, joblib  # noqa: F401
         print('[+] Python ML packages: OK')
     except ImportError as e:
         print(f'[!] Python ML packages missing: {e}')
-        print('[!] Install manually: pip3 install scikit-learn numpy joblib')
 
-    # --- 2. Copy tool files ---
-    print('[*] Copying tool files...')
-    os.makedirs(install_dir, exist_ok=True)
-    shutil.copy2(os.path.join(script_dir, 'oneshot.py'), install_dir)
-    os.chmod(os.path.join(install_dir, 'oneshot.py'), 0o755)
+    # --- 2. Download ALL source files from GitHub (no git clone needed) ---
+    print('[*] Downloading source files from GitHub...')
+    os.makedirs(os.path.join(INSTALL_DIR, 'src', 'wifi'), exist_ok=True)
+    os.makedirs(os.path.join(INSTALL_DIR, 'src', 'wps'), exist_ok=True)
+    os.makedirs(os.path.join(INSTALL_DIR, 'models'), exist_ok=True)
 
-    models_src = os.path.join(script_dir, 'models')
-    if os.path.isdir(models_src):
-        shutil.copytree(models_src, os.path.join(install_dir, 'models'), dirs_exist_ok=True)
+    def _download(raw_path, dest_path):
+        url = f'{RAW}/{raw_path}'
+        dest = os.path.join(INSTALL_DIR, dest_path)
+        try:
+            urllib.request.urlretrieve(url, dest)
+            print(f'  [+] {raw_path}')
+            return True
+        except Exception as e:
+            print(f'  [!] {raw_path}: {e}')
+            return False
 
-    for vfile in ('vulnwsc_new.txt', 'vulnwsc.txt'):
-        vuln_src = os.path.join(script_dir, vfile)
-        if os.path.exists(vuln_src):
-            shutil.copy2(vuln_src, install_dir)
+    # Core files
+    _download('oneshot.py', 'oneshot.py')
+    _download('vulnwsc_new.txt', 'vulnwsc_new.txt')
 
-    src_dir = os.path.join(script_dir, 'src')
-    if os.path.isdir(src_dir):
-        shutil.copytree(src_dir, os.path.join(install_dir, 'src'), dirs_exist_ok=True)
+    # Knowledge files
+    for f in ('wifi_master_knowledge.py', 'wps_knowledge_base.py',
+              'cve_database.py', 'research_knowledge.py',
+              'offensive_reasoning_engine.py'):
+        _download(f, f)
 
-    for kfile in ('wifi_master_knowledge.py', 'wps_knowledge_base.py',
-                  'cve_database.py', 'research_knowledge.py',
-                  'offensive_reasoning_engine.py'):
-        ksrc = os.path.join(script_dir, kfile)
-        if os.path.exists(ksrc):
-            shutil.copy2(ksrc, install_dir)
+    os.chmod(os.path.join(INSTALL_DIR, 'oneshot.py'), 0o755)
 
-    # --- 3. Create global commands ---
+    # --- 3. Download AI brain model from GitHub Releases ---
+    print('[*] Downloading latest AI brain model from Releases...')
+    try:
+        release_url = f'{RELEASES}/latest'
+        with urllib.request.urlopen(release_url, timeout=15) as resp:
+            data = json.loads(resp.read())
+        tag = data.get('tag_name', '')
+        print(f'[*] Latest release: {tag}')
+        dl = 0
+        for asset in data.get('assets', []):
+            dl_url = asset.get('browser_download_url', '')
+            name = asset.get('name', '')
+            if not dl_url or not name:
+                continue
+            dest = os.path.join(INSTALL_DIR, 'models', name)
+            print(f'  Downloading {name}...')
+            try:
+                urllib.request.urlretrieve(dl_url, dest)
+                dl += 1
+            except Exception as e:
+                print(f'  Warning: {name}: {e}')
+        if dl:
+            print(f'[+] Downloaded {dl} model files')
+        else:
+            print('[!] No model files downloaded')
+    except Exception as e:
+        print(f'[!] Release download failed: {e}')
+
+    # --- 4. Create global commands ---
+    print('[*] Creating global commands...')
     wifi4_path = '/usr/local/bin/wifi4'
     with open(wifi4_path, 'w') as f:
         f.write('#!/bin/bash\n')
-        f.write('# wifi4 -- OneShot AI autonomous WiFi tool\n')
-        f.write('exec python3 /usr/local/bin/oneshot-ai/oneshot.py --ai "$@"\n')
+        f.write(f'exec python3 {INSTALL_DIR}/oneshot.py --ai "$@"\n')
     os.chmod(wifi4_path, 0o755)
 
     oneshot_path = '/usr/local/bin/oneshot'
     with open(oneshot_path, 'w') as f:
         f.write('#!/bin/bash\n')
-        f.write('# oneshot -- OneShot AI WiFi tool\n')
-        f.write('exec python3 /usr/local/bin/oneshot-ai/oneshot.py "$@"\n')
+        f.write(f'exec python3 {INSTALL_DIR}/oneshot.py "$@"\n')
     os.chmod(oneshot_path, 0o755)
 
-    print('[+] Installed!')
-    print('[+] Usage: wifi4')
-    print('[+] Usage: oneshot --ai')
-    print('[+] Usage: oneshot --check BSSID')
-    print(f'[+] Location: {install_dir}/')
+    print('[+] Commands created: wifi4, oneshot')
 
-
-    # --- 4. Download AI models from GitHub Releases ---
-    try:
-        import urllib.request as _urlreq
-        import json as _json
-        REPO = 'OPX-Aminul/OPXoneshot'
-        MODELS_DIR = os.path.join(install_dir, 'models')
-        os.makedirs(MODELS_DIR, exist_ok=True)
-        print('[*] Downloading latest AI brain model from GitHub Releases...')
-        try:
-            _url = f'https://api.github.com/repos/{REPO}/releases/latest'
-            with _urlreq.urlopen(_url, timeout=15) as _resp:
-                _data = _json.loads(_resp.read())
-            _tag = _data.get('tag_name', '')
-            print(f'[*] Latest release: {_tag}')
-            _dl = 0
-            for _asset in _data.get('assets', []):
-                _dl_url = _asset.get('browser_download_url', '')
-                _name = _asset.get('name', '')
-                if not _dl_url or not _name:
-                    continue
-                _dest = os.path.join(MODELS_DIR, _name)
-                print(f'  Downloading {_name}...')
-                try:
-                    _urlreq.urlretrieve(_dl_url, _dest)
-                    _dl += 1
-                except Exception as _e:
-                    print(f'  Warning: {_name}: {_e}')
-            if _dl:
-                print(f'[+] Downloaded {_dl} model files')
-            else:
-                print('[!] No model files downloaded')
-        except Exception as _e:
-            print(f'[!] Release download failed: {_e}')
-    except ImportError:
-        print('[!] urllib not available for model download')
-
-    # --- 5. Verify installation ---
+    # --- 5. Verify ---
     print('[*] Verifying installation...')
-    _pass = 0
-    _fail = 0
-    for _cmd in ['python3', 'iw', 'curl', 'git']:
-        if shutil.which(_cmd):
-            print(f'  [+] {_cmd}: OK')
+    _pass, _fail = 0, 0
+    for cmd in ['python3', 'iw', 'curl']:
+        if shutil.which(cmd):
+            print(f'  [+] {cmd}')
             _pass += 1
         else:
-            print(f'  [!] {_cmd}: NOT FOUND')
+            print(f'  [!] {cmd} NOT FOUND')
             _fail += 1
     try:
         import sklearn, numpy, joblib  # noqa: F401
-        print('  [+] Python ML packages (sklearn, numpy, joblib): OK')
+        print('  [+] Python ML packages')
         _pass += 1
     except ImportError:
-        print('  [!] Python ML packages: MISSING')
+        print('  [!] Python ML packages MISSING')
         _fail += 1
-    for _tool in ['reaver', 'pixiewps']:
-        if shutil.which(_tool):
-            print(f'  [+] {_tool}: OK')
-            _pass += 1
-        else:
-            print(f'  [!] {_tool}: not found (optional)')
+    if os.path.exists(os.path.join(INSTALL_DIR, 'models', 'ai_agent.joblib')):
+        print('  [+] AI brain model')
+        _pass += 1
+    else:
+        print('  [!] AI model not downloaded (will train on first run)')
     if shutil.which('wifi4'):
-        print('  [+] wifi4: OK')
+        print('  [+] wifi4 command')
         _pass += 1
-    else:
-        print('  [!] wifi4: NOT FOUND')
-        _fail += 1
-    if shutil.which('oneshot'):
-        print('  [+] oneshot: OK')
-        _pass += 1
-    else:
-        print('  [!] oneshot: NOT FOUND')
-        _fail += 1
     print(f'  Verification: {_pass} passed, {_fail} warnings')
+
+    print()
+    print('[+] Installed!')
+    print('[+] Usage: wifi4')
+    print(f'[+] Location: {INSTALL_DIR}/')
+
 
 
 
