@@ -4,6 +4,16 @@ __pycache__/
 .env
 *.run
 
+# AI model binaries (stored in GitHub Releases, not in repo)
+models/ai_agent.joblib
+models/ai_rf_model.bin
+models/ai_data_buffer.bin
+models/ai_q_table.bin
+models/ai_data.pkl
+models/ai_qtable.pkl
+models/ai_agent.joblib.tmp
+models/ai_agent.joblib.prev
+
 # Community sync runtime artifacts
 .sync.lock
 training_queue.jsonl

@@ -8836,9 +8836,10 @@ import math
 import urllib.error  # noqa: F401  (used by SyncEngine error handling)
 
 # --- Storage safety thresholds (plan §19) ---
-FOOTPRINT_WARN  = 80 * 1024 * 1024
-FOOTPRINT_CRIT  = 90 * 1024 * 1024
-FOOTPRINT_HARD  = 100 * 1024 * 1024
+# Hard cap removed: models grow freely via GitHub Releases.
+FOOTPRINT_WARN  = 80 * 1024 * 1024  # start GC on noise
+FOOTPRINT_CRIT  = 90 * 1024 * 1024  # aggressive GC
+FOOTPRINT_HARD  = 0                  # disabled — no size limit
 
 # --- Sync throttle / rate-limit (plan §28,29) ---
 SYNC_COOLDOWN  = 30 * 60     # min seconds between full syncs

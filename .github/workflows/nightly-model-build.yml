@@ -33,14 +33,20 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python model_build.py
 
-      - name: Commit & push model
+      - name: Publish model to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git config user.name "OPX Community Bot"
-          git config user.email "bot@opxoneshot.local"
-          git add models/
-          if git diff --cached --quiet; then
-            echo "No model changes to publish"
-          else
-            git commit -m "training: nightly community model rebuild ($(date -u +%Y-%m-%d))"
-            git push origin HEAD
-          fi
+          TAG="model-$(date -u +%Y%m%d-%H%M%S)"
+          # Create release with model files as assets
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --title "AI Brain Model $TAG" \
+            --notes "Auto-trained community model ($(date -u +%Y-%m-%d)) | $(wc -c < models/ai_agent.joblib) bytes | cross-val: $(python -c "import json; print(json.load(open('models/model_metadata.json')).get('cross_val_accuracy','?'))")" \
+            models/ai_agent.joblib \
+            models/model_metadata.json
+          # Delete old releases beyond last 5 to save storage
+          RELEASES=$(gh release list --repo "${{ github.repository }}" --limit 50 | grep '^model-' | tail -n +6 | awk '{print $1}')
+          for OLD in $RELEASES; do
+            gh release delete "$OLD" --repo "${{ github.repository }}" --yes --cleanup-tag || true
+          done

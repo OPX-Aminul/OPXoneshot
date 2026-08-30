@@ -36,7 +36,7 @@ HEADERS = {'apikey': SUPABASE_KEY, 'Authorization': f'Bearer {SUPABASE_KEY}'}
 # --- safety constants (mirror oneshot.py) -----------------------------------
 FOOTPRINT_WARN = 80 * 1024 * 1024
 FOOTPRINT_CRIT = 90 * 1024 * 1024
-FOOTPRINT_HARD = 100 * 1024 * 1024
+FOOTPRINT_HARD = 0  # disabled — models grow freely via Releases
 MAX_EVENTS_PER_REQ = 50
 MAX_PULL_ROWS = 20000
 MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models')

@@ -315,6 +315,53 @@ install_python_deps() {
     fi
 }
 
+# ── Download AI models from GitHub Releases ────────────────
+download_models() {
+    info "Downloading latest AI brain model from GitHub Releases..."
+
+    REPO="OPX-Aminul/OPXoneshot"
+    MODELS_DIR="${SCRIPT_DIR}/models"
+    mkdir -p "$MODELS_DIR"
+
+    # Get latest release tag from GitHub API
+    LATEST_TAG=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4)
+
+    if [ -z "$LATEST_TAG" ]; then
+        # Fallback: try 'model-latest' tag
+        LATEST_TAG="model-latest"
+    fi
+
+    info "Latest release tag: ${LATEST_TAG}"
+
+    # Download each model asset from the release
+    RELEASE_URL="https://api.github.com/repos/${REPO}/releases/tags/${LATEST_TAG}"
+    ASSETS=$(curl -fsSL "$RELEASE_URL" 2>/dev/null | grep -o '"browser_download_url": *"[^"]*"' | cut -d'"' -f4)
+
+    if [ -z "$ASSETS" ]; then
+        warn "No release assets found for ${LATEST_TAG}"
+        warn "Models will be created on first run (local training)"
+        return 0
+    fi
+
+    DOWNLOADED=0
+    while IFS= read -r URL; do
+        FILENAME=$(basename "$URL")
+        DEST="${MODELS_DIR}/${FILENAME}"
+        info "  Downloading ${FILENAME}..."
+        if curl -fsSL -o "$DEST" "$URL" 2>/dev/null; then
+            DOWNLOADED=$((DOWNLOADED + 1))
+        else
+            warn "  Failed to download ${FILENAME}"
+        fi
+    done <<< "$ASSETS"
+
+    if [ "$DOWNLOADED" -gt 0 ]; then
+        ok "Downloaded ${DOWNLOADED} model files to ${MODELS_DIR}"
+    else
+        warn "No model files downloaded — will train locally on first run"
+    fi
+}
+
 # ── Install wifi4 command ────────────────────────────────────
 install_wifi4() {
     info "Installing wifi4 command..."
@@ -402,6 +449,7 @@ main() {
     esac
 
     install_python_deps
+    download_models
     install_wifi4
     verify_install
 
