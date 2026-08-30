@@ -5,7 +5,8 @@
 # Supports: Alpine, Kali, Debian, Ubuntu, Parrot, Arch, Fedora
 # ================================================================
 
-set -e
+# Note: set -e is NOT used because some packages may not exist on
+# every distro. We handle errors per-package instead.
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

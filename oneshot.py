@@ -8909,6 +8909,81 @@ def _installGlobally():
     print(f'[+] Location: {install_dir}/')
 
 
+    # --- 4. Download AI models from GitHub Releases ---
+    try:
+        import urllib.request as _urlreq
+        import json as _json
+        REPO = 'OPX-Aminul/OPXoneshot'
+        MODELS_DIR = os.path.join(install_dir, 'models')
+        os.makedirs(MODELS_DIR, exist_ok=True)
+        print('[*] Downloading latest AI brain model from GitHub Releases...')
+        try:
+            _url = f'https://api.github.com/repos/{REPO}/releases/latest'
+            with _urlreq.urlopen(_url, timeout=15) as _resp:
+                _data = _json.loads(_resp.read())
+            _tag = _data.get('tag_name', '')
+            print(f'[*] Latest release: {_tag}')
+            _dl = 0
+            for _asset in _data.get('assets', []):
+                _dl_url = _asset.get('browser_download_url', '')
+                _name = _asset.get('name', '')
+                if not _dl_url or not _name:
+                    continue
+                _dest = os.path.join(MODELS_DIR, _name)
+                print(f'  Downloading {_name}...')
+                try:
+                    _urlreq.urlretrieve(_dl_url, _dest)
+                    _dl += 1
+                except Exception as _e:
+                    print(f'  Warning: {_name}: {_e}')
+            if _dl:
+                print(f'[+] Downloaded {_dl} model files')
+            else:
+                print('[!] No model files downloaded')
+        except Exception as _e:
+            print(f'[!] Release download failed: {_e}')
+    except ImportError:
+        print('[!] urllib not available for model download')
+
+    # --- 5. Verify installation ---
+    print('[*] Verifying installation...')
+    _pass = 0
+    _fail = 0
+    for _cmd in ['python3', 'iw', 'curl', 'git']:
+        if shutil.which(_cmd):
+            print(f'  [+] {_cmd}: OK')
+            _pass += 1
+        else:
+            print(f'  [!] {_cmd}: NOT FOUND')
+            _fail += 1
+    try:
+        import sklearn, numpy, joblib  # noqa: F401
+        print('  [+] Python ML packages (sklearn, numpy, joblib): OK')
+        _pass += 1
+    except ImportError:
+        print('  [!] Python ML packages: MISSING')
+        _fail += 1
+    for _tool in ['reaver', 'pixiewps']:
+        if shutil.which(_tool):
+            print(f'  [+] {_tool}: OK')
+            _pass += 1
+        else:
+            print(f'  [!] {_tool}: not found (optional)')
+    if shutil.which('wifi4'):
+        print('  [+] wifi4: OK')
+        _pass += 1
+    else:
+        print('  [!] wifi4: NOT FOUND')
+        _fail += 1
+    if shutil.which('oneshot'):
+        print('  [+] oneshot: OK')
+        _pass += 1
+    else:
+        print('  [!] oneshot: NOT FOUND')
+        _fail += 1
+    print(f'  Verification: {_pass} passed, {_fail} warnings')
+
+
 
 def syncModelToRepo(agent=None):
     """Copy the current trained model from ~/.OneShot-Extended/ into the repo
